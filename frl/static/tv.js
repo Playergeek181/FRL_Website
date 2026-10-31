@@ -31,10 +31,12 @@
     }
     return el;
   }
-  function fmt(ms) {
-    var s = Math.ceil(Math.max(0, ms) / 1000);
-    var m = Math.floor(s / 60), r = s % 60;
-    return (m < 10 ? "0" : "") + m + ":" + (r < 10 ? "0" : "") + r;
+  function pad(n, w) { n = String(n); while (n.length < w) n = "0" + n; return n; }
+  // Returns ["MM:SS", ".mmm"] for the big digits and the smaller milliseconds.
+  function fmtParts(ms) {
+    ms = Math.max(0, Math.floor(ms));
+    var s = Math.floor(ms / 1000), m = Math.floor(s / 60);
+    return [pad(m, 2) + ":" + pad(s % 60, 2), "." + pad(ms % 1000, 3)];
   }
   function remaining() {
     var t = state.timer, ms = t.remaining_ms;
@@ -45,8 +47,15 @@
   function renderCountdown() {
     var el = $("countdown");
     if (!el || !state) return;
-    var ms = remaining();
-    el.textContent = fmt(ms);
+    var ms = remaining(), p = fmtParts(ms);
+    if (!el.firstChild || el.firstChild.className !== "cd-main") {
+      el.textContent = "";
+      var main = document.createElement("span"), frac = document.createElement("span");
+      main.className = "cd-main"; frac.className = "cd-ms";
+      el.appendChild(main); el.appendChild(frac);
+    }
+    el.firstChild.textContent = p[0];
+    el.lastChild.textContent = p[1];
     el.classList.toggle("low", ms < 300000);
   }
 
@@ -126,5 +135,5 @@
 
   poll();
   setInterval(poll, 1000);
-  setInterval(renderCountdown, 250);
+  (function frame() { renderCountdown(); requestAnimationFrame(frame); })();
 })();

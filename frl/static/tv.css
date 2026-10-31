@@ -12,6 +12,7 @@ body { overflow: hidden; }
 .arena-msg { font-size: 5vh; font-weight: bold; opacity: .8; }
 .countdown { font-size: 16vh; font-weight: bold; color: #ffd166; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .countdown.low { color: #ef476f; }
+.countdown .cd-ms { font-size: .45em; opacity: .85; }
 #next { display: flex; align-items: center; gap: 2vh; }
 #next .logo { width: 9vh; height: 9vh; font-size: 3vh; }
 .next-name { font-size: 4vh; overflow-wrap: anywhere; }

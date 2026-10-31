@@ -62,9 +62,11 @@
     (children || []).forEach(function (c) { e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
     return e;
   }
+  function pad(n, w) { n = String(n); while (n.length < w) n = "0" + n; return n; }
   function fmt(ms) {
-    var s = Math.ceil(Math.max(0, ms) / 1000), m = Math.floor(s / 60), r = s % 60;
-    return (m < 10 ? "0" : "") + m + ":" + (r < 10 ? "0" : "") + r;
+    ms = Math.max(0, Math.floor(ms));
+    var s = Math.floor(ms / 1000), m = Math.floor(s / 60);
+    return pad(m, 2) + ":" + pad(s % 60, 2) + "." + pad(ms % 1000, 3);
   }
   function teamById(id) { return state.teams.filter(function (t) { return t.id === id; })[0]; }
   function toast(msgs) {
@@ -463,5 +465,5 @@
   }
   poll();
   setInterval(poll, 1000);
-  setInterval(renderCountdown, 250);
+  (function frame() { renderCountdown(); requestAnimationFrame(frame); })();
 })();
