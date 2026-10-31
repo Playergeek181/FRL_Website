@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FRL 2026 - Controle</title>
+<link rel="stylesheet" href="/static/common.css">
+<link rel="stylesheet" href="/static/controle.css">
+</head>
+<body>
+<div id="offline" hidden>sem conexão</div>
+<div id="toast" hidden></div>
+<header id="arena" class="panel">
+  <label>Fase
+    <select id="phase-select">
+      <option value="1">Fase 1</option>
+      <option value="2">Fase 2</option>
+      <option value="3">Fase 3</option>
+      <option value="4">Fase 4</option>
+    </select>
+  </label>
+  <span id="phase-name" class="muted"></span>
+  <span class="inarena">Na arena: <b id="arena-name">—</b></span>
+  <span id="countdown">30:00</span>
+  <button id="b-start" data-timer="start">▶ Iniciar</button>
+  <button id="b-pause" data-timer="pause">⏸ Pausar</button>
+  <button id="b-plus" data-timer="add">+1 min</button>
+  <button id="b-reset" data-timer="reset" data-confirm="Reiniciar o cronômetro desta equipe?">↺ Reiniciar</button>
+  <button id="b-next" data-timer="next" data-confirm="Passar para a próxima equipe?">⏭ Próxima equipe</button>
+  <span class="next muted">Próxima: <span id="next-name">—</span></span>
+</header>
+
+<main class="grid">
+  <section class="panel" id="record">
+    <h2 id="record-title">Registrar tentativa</h2>
+    <label class="row">Equipe <select id="team-select"></select></label>
+    <div id="fields"></div>
+    <div id="formula" class="formula"></div>
+    <div id="form-errors" class="errors"></div>
+    <div class="row">
+      <button id="save-attempt" class="primary">Salvar tentativa</button>
+      <button id="cancel-edit" hidden>Cancelar edição</button>
+    </div>
+  </section>
+
+  <section class="panel" id="attempts">
+    <h2 id="attempts-title">Tentativas</h2>
+    <ul id="attempts-list" class="plain"></ul>
+  </section>
+
+  <section class="panel" id="order">
+    <h2 id="order-title">Ordem da fase</h2>
+    <ol id="order-list"></ol>
+    <div class="row">
+      <select id="order-add"></select>
+      <button id="order-add-btn">Adicionar</button>
+    </div>
+    <div class="row"><button id="order-save" class="primary">Salvar ordem</button><span id="order-dirty" class="muted"></span></div>
+  </section>
+
+  <section class="panel" id="teams">
+    <h2>Equipes</h2>
+    <form id="team-add" class="row">
+      <input id="new-name" placeholder="Nome da equipe" required>
+      <input id="new-logo" type="file" accept=".png,.jpg,.jpeg,.webp,.svg">
+      <label class="check"><input id="new-hw" type="checkbox"> open-hardware por padrão</label>
+      <button class="primary">Adicionar equipe</button>
+    </form>
+    <ul id="teams-list" class="plain"></ul>
+  </section>
+</main>
+<script src="/static/controle.js"></script>
+</body>
+</html>
