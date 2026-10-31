@@ -157,3 +157,10 @@ def test_open_hw_default_create_and_edit(client):
     assert s["teams"][0]["open_hw_default"] is True
     s = client.post(f"/api/teams/{tid}", data={"name": "Z"}).get_json()
     assert s["teams"][0]["name"] == "Z" and s["teams"][0]["open_hw_default"] is True
+
+
+def test_static_assets_served(client):
+    assert client.get("/static/tv.js").status_code == 200
+    assert client.get("/static/tv.css").status_code == 200
+    assert client.get("/static/common.css").status_code == 200
+    assert client.get("/static/../app.py").status_code == 404

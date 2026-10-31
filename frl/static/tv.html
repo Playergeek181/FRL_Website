@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FRL 2026 - Placar</title>
+<link rel="stylesheet" href="/static/common.css">
+<link rel="stylesheet" href="/static/tv.css">
+</head>
+<body>
+<div id="offline" hidden>sem conexão</div>
+<main id="tv">
+  <section id="left">
+    <div id="phase" class="phase"></div>
+    <div class="card" id="arena">
+      <div class="label">NA ARENA</div>
+      <div id="arena-body" class="arena-body"></div>
+    </div>
+    <div class="card" id="next">
+      <div id="next-logo"></div>
+      <div><div class="label">PRÓXIMA</div><div id="next-name" class="next-name"></div></div>
+    </div>
+  </section>
+  <section id="right" class="card">
+    <div class="label">CLASSIFICAÇÃO</div>
+    <table id="rank">
+      <thead><tr><th>#</th><th></th><th class="name">Equipe</th><th>F1</th><th>F2</th><th>F3</th><th>F4</th><th class="total">Total</th></tr></thead>
+      <tbody id="rank-body"></tbody>
+    </table>
+  </section>
+</main>
+<script src="/static/tv.js"></script>
+</body>
+</html>

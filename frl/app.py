@@ -99,6 +99,10 @@ def create_app(data_dir: Path) -> Flask:
     def controle():
         return send_from_directory(STATIC_DIR, "controle.html")
 
+    @app.get("/static/<path:filename>")
+    def static_files(filename):
+        return send_from_directory(STATIC_DIR, filename)
+
     @app.get("/logos/<path:filename>")
     def logos(filename):
         return send_from_directory(logo_dir, filename)
