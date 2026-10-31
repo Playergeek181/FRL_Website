@@ -58,6 +58,13 @@ class Store:
                 return a
         raise KeyError(attempt_id)
 
+    def _clamp_slot(self) -> None:
+        """Se o slot passou do fim da ordem, prende o índice e para o cronômetro."""
+        n = len(self.state["orders"][str(self.state["active_phase"])])
+        slot = self.state["slot"]
+        if slot["index"] > n or (slot["index"] >= n and slot["running"]):
+            self.state["slot"] = timer.new_slot(n)
+
     @staticmethod
     def _check_phase(phase: int) -> None:
         if phase not in (1, 2, 3, 4):
@@ -92,6 +99,7 @@ class Store:
                 self.state["orders"][k] = [t for t in order if t != team_id]
             self.state["attempts"] = [a for a in self.state["attempts"]
                                       if a["team_id"] != team_id]
+            self._clamp_slot()
             self._save()
 
     # -- ordem / fase --------------------------------------------------
@@ -101,6 +109,7 @@ class Store:
             for tid in team_ids:
                 self._team(tid)
             self.state["orders"][str(phase)] = list(team_ids)
+            self._clamp_slot()
             self._save()
 
     def set_phase(self, phase: int) -> None:
@@ -128,13 +137,16 @@ class Store:
             else:
                 raise ValueError(["Ação inválida."])
             self.state["slot"] = slot
+            self._clamp_slot()
             self._save()
 
     def current_and_next(self):
         with self._lock:
             slot = timer.tick(self.state["slot"], self.clock())
-            if slot != self.state["slot"]:
-                self.state["slot"] = slot
+            before = self.state["slot"]
+            self.state["slot"] = slot
+            self._clamp_slot()
+            if self.state["slot"] != before:
                 self._save()
             order = self.state["orders"][str(self.state["active_phase"])]
             idx = slot["index"]
