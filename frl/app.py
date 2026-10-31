@@ -14,8 +14,14 @@ STATIC_DIR = Path(__file__).parent / "static"
 LOGO_EXTS = {"png", "jpg", "jpeg", "webp", "svg"}
 
 
-def _logo_url(logo):
-    return f"/logos/{logo}" if logo else None
+def _logo_url(logo_dir: Path, logo):
+    """URL do logo com ?v=<mtime> para a TV recarregar um logo trocado (mesmo nome)."""
+    if not logo:
+        return None
+    try:
+        return f"/logos/{logo}?v={int((logo_dir / logo).stat().st_mtime)}"
+    except OSError:
+        return f"/logos/{logo}"
 
 
 def _truthy(value) -> bool:
@@ -46,6 +52,9 @@ def create_app(data_dir: Path) -> Flask:
             return jsonify(errors=[msg]), e.code
         return e
 
+    def logo_url(logo):
+        return _logo_url(logo_dir, logo)
+
     def body() -> dict:
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
@@ -59,7 +68,7 @@ def create_app(data_dir: Path) -> Flask:
         teams = {t["id"]: t for t in s["teams"]}
 
         def team_view(t):
-            return {"id": t["id"], "name": t["name"], "logo": _logo_url(t["logo"])} if t else None
+            return {"id": t["id"], "name": t["name"], "logo": logo_url(t["logo"])} if t else None
 
         slot = s["slot"]
         phase = s["active_phase"]
@@ -68,7 +77,7 @@ def create_app(data_dir: Path) -> Flask:
         for row in overall_ranking([t["id"] for t in s["teams"]], store.best_by_phase()):
             t = teams[row["team_id"]]
             ranking.append({
-                "team_id": t["id"], "name": t["name"], "logo": _logo_url(t["logo"]),
+                "team_id": t["id"], "name": t["name"], "logo": logo_url(t["logo"]),
                 "position": row["position"],
                 "phase_points": {str(p): v for p, v in row["phase_points"].items()},
                 "total": row["total"]})
@@ -79,7 +88,7 @@ def create_app(data_dir: Path) -> Flask:
             "timer": {"running": bool(slot["running"]),
                       "remaining_ms": timer.remaining(slot, store.clock())},
             "ranking": ranking,
-            "teams": [{"id": t["id"], "name": t["name"], "logo": _logo_url(t["logo"]),
+            "teams": [{"id": t["id"], "name": t["name"], "logo": logo_url(t["logo"]),
                        "open_hw_default": t["open_hw_default"]} for t in s["teams"]],
             "orders": {k: list(v) for k, v in s["orders"].items()},
             "attempts": [{k: a[k] for k in ("id", "team_id", "phase", "inputs", "points")}

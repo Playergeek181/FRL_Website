@@ -45,6 +45,7 @@ def overall_ranking(team_ids, best_by_phase):
         if key != prev:
             position = i
             prev = key
-        row["position"] = position
+        # Regras Obs. 1/3: só quem pontuou pode ocupar posição (1º–3º etc.)
+        row["position"] = position if row["total"] > 0 else None
         out.append(row)
     return out

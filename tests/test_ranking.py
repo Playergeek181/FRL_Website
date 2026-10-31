@@ -46,3 +46,15 @@ def test_team_with_nothing_is_last():
     best = {1: {"A": 10}, 2: {}, 3: {}, 4: {}}
     rows = overall_ranking(["Z", "A"], best)
     assert rows[-1]["team_id"] == "Z" and rows[-1]["total"] == 0
+
+def test_zero_total_teams_have_no_position():
+    rows = overall_ranking(["A", "B", "C"], {1: {}, 2: {}, 3: {}, 4: {}})
+    assert [r["position"] for r in rows] == [None, None, None]
+    assert [r["team_id"] for r in rows] == ["A", "B", "C"]
+
+def test_only_scored_teams_get_position():
+    best = {1: {"A": None, "B": 40, "C": 0}, 2: {}, 3: {}, 4: {}}
+    rows = overall_ranking(["A", "B", "C"], best)
+    by = {r["team_id"]: r for r in rows}
+    assert rows[0]["team_id"] == "B" and by["B"]["position"] == 1
+    assert by["A"]["position"] is None and by["C"]["position"] is None

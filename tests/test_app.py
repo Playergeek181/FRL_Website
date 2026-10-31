@@ -127,7 +127,7 @@ def test_logo_replace_removes_old_file(client, tmp_path):
     tid = s["teams"][0]["id"]
     assert (tmp_path / "logos" / f"{tid}.png").exists()
     s = _logo_post(client, f"/api/teams/{tid}", "b.jpg").get_json()
-    assert s["teams"][0]["logo"] == f"/logos/{tid}.jpg"
+    assert s["teams"][0]["logo"].startswith(f"/logos/{tid}.jpg?v=")
     assert not (tmp_path / "logos" / f"{tid}.png").exists()
     assert (tmp_path / "logos" / f"{tid}.jpg").exists()
 
@@ -164,3 +164,30 @@ def test_static_assets_served(client):
     assert client.get("/static/tv.css").status_code == 200
     assert client.get("/static/common.css").status_code == 200
     assert client.get("/static/../app.py").status_code == 404
+
+
+def test_ranking_positions_null_until_scored(client):
+    a, b = _mk(client, "A"), _mk(client, "B")
+    s = client.get("/api/state").get_json()
+    assert [r["position"] for r in s["ranking"]] == [None, None]
+    _att(client, b, 2)
+    r = _rank(client.get("/api/state").get_json())
+    assert r[b]["position"] == 1 and r[a]["position"] is None
+
+
+def test_logo_url_changes_when_replaced_with_same_extension(client, tmp_path):
+    import os
+    s = _logo_post(client, "/api/teams", "a.png").get_json()
+    tid = s["teams"][0]["id"]
+    url1 = s["teams"][0]["logo"]
+    assert url1.startswith(f"/logos/{tid}.png?v=")
+    assert client.get(url1).status_code == 200
+    path = tmp_path / "logos" / f"{tid}.png"
+    st = path.stat()
+    os.utime(path, (st.st_atime - 100, st.st_mtime - 100))   # simula upload antigo
+    url_old = client.get("/api/state").get_json()["teams"][0]["logo"]
+    s = _logo_post(client, f"/api/teams/{tid}", "b.png", data=b"\x89PNG2").get_json()
+    url2 = s["teams"][0]["logo"]
+    assert url2 != url_old and url2.startswith(f"/logos/{tid}.png?v=")
+    assert s["ranking"][0]["logo"] == url2
+    assert client.get(url2).data == b"\x89PNG2"

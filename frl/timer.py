@@ -9,8 +9,9 @@ def new_slot(index: int = 0) -> dict:
 def remaining(slot: dict, now_ms: float) -> int:
     if not slot["running"]:
         return max(0, int(slot["remaining_ms"]))
-    elapsed = now_ms - slot["started_at"]
-    return max(0, int(slot["remaining_ms"] - elapsed))
+    # relógio que volta (ajuste NTP/RTC) não pode dar mais tempo que o restante salvo
+    elapsed = max(0, now_ms - slot["started_at"])
+    return max(0, min(int(slot["remaining_ms"]), int(slot["remaining_ms"] - elapsed)))
 
 
 def start(slot: dict, now_ms: float) -> dict:

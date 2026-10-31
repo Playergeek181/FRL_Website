@@ -1,6 +1,8 @@
 """Estado da competição, persistido em data/state.json."""
 import json
 import os
+import shutil
+import sys
 import threading
 import time
 from pathlib import Path
@@ -28,23 +30,87 @@ class Store:
         self.clock = clock
         self._lock = threading.RLock()
         self.path = self.data_dir / "state.json"
-        if self.path.exists():
-            self.state = json.loads(self.path.read_text(encoding="utf-8"))
-        else:
-            self.state = {
-                "teams": [],
-                "orders": {str(p): [] for p in range(1, 5)},
-                "active_phase": 1,
-                "slot": timer.new_slot(0),
-                "attempts": [],
-            }
+        self.bak_path = self.data_dir / "state.json.bak"
+        self.state = self._load()
 
     # -- persistência --------------------------------------------------
+    @staticmethod
+    def _empty_state() -> dict:
+        return {
+            "teams": [],
+            "orders": {str(p): [] for p in range(1, 5)},
+            "active_phase": 1,
+            "slot": timer.new_slot(0),
+            "attempts": [],
+        }
+
+    @staticmethod
+    def _warn(msg: str) -> None:
+        print(f"!!! FRL AVISO: {msg}", file=sys.stderr, flush=True)
+
+    @staticmethod
+    def _read(path: Path):
+        """Estado lido de path, ou None se o arquivo estiver ilegível/inválido."""
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        keys = ("teams", "orders", "active_phase", "slot", "attempts")
+        if not isinstance(state, dict) or any(k not in state for k in keys):
+            return None
+        return state
+
+    def _move_aside(self, path: Path) -> Path:
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        dest = path.with_name(f"{path.name}.corrupt-{stamp}")
+        n = 1
+        while dest.exists():
+            dest = path.with_name(f"{path.name}.corrupt-{stamp}-{n}")
+            n += 1
+        os.replace(path, dest)
+        self._warn(f"{path.name} corrompido; movido para {dest}")
+        return dest
+
+    def _load(self) -> dict:
+        found_bad = False
+        for path in (self.path, self.bak_path):
+            if not path.exists():
+                continue
+            state = self._read(path)
+            if state is not None:
+                if path == self.bak_path:
+                    self._warn(f"usando o backup {path} (state.json ausente ou corrompido)")
+                return state
+            self._move_aside(path)
+            found_bad = True
+        if found_bad:
+            self._warn("nenhum estado utilizável encontrado; começando do zero "
+                       "(arquivos corrompidos preservados em data/)")
+        return self._empty_state()
+
     def _save(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         tmp = self.data_dir / "state.json.tmp"
-        tmp.write_text(json.dumps(self.state, ensure_ascii=False, indent=2), encoding="utf-8")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(json.dumps(self.state, ensure_ascii=False, indent=2))
+            f.flush()
+            os.fsync(f.fileno())
+        if self.path.exists():  # guarda o último arquivo bom como state.json.bak
+            bak_tmp = self.data_dir / "state.json.bak.tmp"
+            with open(self.path, "rb") as src, open(bak_tmp, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+                dst.flush()
+                os.fsync(dst.fileno())
+            os.replace(bak_tmp, self.bak_path)
         os.replace(tmp, self.path)
+        try:  # garante que as renomeações sobrevivem a queda de energia
+            fd = os.open(self.data_dir, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        except OSError:
+            pass
 
     def _team(self, team_id: str) -> dict:
         for t in self.state["teams"]:
@@ -57,6 +123,18 @@ class Store:
             if a["id"] == attempt_id:
                 return a
         raise KeyError(attempt_id)
+
+    def _current_team_id(self):
+        order = self.state["orders"][str(self.state["active_phase"])]
+        idx = self.state["slot"]["index"]
+        return order[idx] if 0 <= idx < len(order) else None
+
+    def _follow_team(self, team_id) -> None:
+        """Mantém a equipe que está na arena após mudar a ordem (cronômetro intacto)."""
+        order = self.state["orders"][str(self.state["active_phase"])]
+        if team_id is not None and team_id in order:
+            self.state["slot"] = {**self.state["slot"], "index": order.index(team_id)}
+        self._clamp_slot()
 
     def _clamp_slot(self) -> None:
         """Se o slot passou do fim da ordem, prende o índice e para o cronômetro."""
@@ -94,12 +172,13 @@ class Store:
     def delete_team(self, team_id) -> None:
         with self._lock:
             team = self._team(team_id)
+            current = self._current_team_id()
             self.state["teams"].remove(team)
             for k, order in self.state["orders"].items():
                 self.state["orders"][k] = [t for t in order if t != team_id]
             self.state["attempts"] = [a for a in self.state["attempts"]
                                       if a["team_id"] != team_id]
-            self._clamp_slot()
+            self._follow_team(current)
             self._save()
 
     # -- ordem / fase --------------------------------------------------
@@ -108,8 +187,9 @@ class Store:
             self._check_phase(phase)
             for tid in team_ids:
                 self._team(tid)
+            current = self._current_team_id()
             self.state["orders"][str(phase)] = list(team_ids)
-            self._clamp_slot()
+            self._follow_team(current)
             self._save()
 
     def set_phase(self, phase: int) -> None:
@@ -123,8 +203,13 @@ class Store:
     def timer_action(self, action: str, now_ms=None) -> None:
         with self._lock:
             now = self.clock() if now_ms is None else now_ms
-            slot = self.state["slot"]
-            if action == "start":
+            # aplica o avanço automático antes: pausar logo após 00:00 não prende a equipe
+            before = self.state["slot"]
+            slot = timer.tick(before, now)
+            expired = slot is not before
+            if action == "next" and expired:
+                pass  # o avanço automático já passou para a próxima equipe
+            elif action == "start":
                 slot = timer.start(slot, now)
             elif action == "pause":
                 slot = timer.pause(slot, now)

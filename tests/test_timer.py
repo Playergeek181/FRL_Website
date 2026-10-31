@@ -21,3 +21,13 @@ def test_tick_auto_advances_and_waits():
 def test_reset_keeps_index():
     s = t.reset(t.start(t.new_slot(index=1), 0))
     assert s["index"] == 1 and s["remaining_ms"] == 1_800_000 and not s["running"]
+
+
+def test_backwards_clock_step_caps_at_remaining():
+    s = t.start(t.new_slot(), now_ms=1_000_000)
+    assert t.remaining(s, 400_000) == 1_800_000
+
+
+def test_backwards_clock_step_after_add():
+    s = t.add(t.start(t.new_slot(), 0), 60_000, 10_000)
+    assert t.remaining(s, 0) == 1_850_000

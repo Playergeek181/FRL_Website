@@ -1,3 +1,4 @@
+import json
 import pytest
 
 from frl import timer
@@ -157,3 +158,96 @@ def test_missing_file_starts_empty_and_write_is_atomic(tmp_path):
     s.add_team("A")
     assert (tmp_path / "state.json").exists() and not (tmp_path / "state.json.tmp").exists()
     assert Store(tmp_path).state["teams"][0]["name"] == "A"
+
+
+def test_corrupt_state_loads_backup_and_moves_bad_file_aside(tmp_path):
+    s = Store(tmp_path)
+    s.add_team("A")
+    s.add_team("B")          # second save: .bak holds the state with team A
+    assert (tmp_path / "state.json.bak").exists()
+    (tmp_path / "state.json").write_text("{corrupt", encoding="utf-8")
+    s2 = Store(tmp_path)
+    assert [t["name"] for t in s2.state["teams"]] == ["A"]
+    aside = list(tmp_path.glob("state.json.corrupt-*"))
+    assert len(aside) == 1 and aside[0].read_text(encoding="utf-8") == "{corrupt"
+    s2.add_team("C")         # keeps working and persisting afterwards
+    assert [t["name"] for t in Store(tmp_path).state["teams"]] == ["A", "C"]
+
+
+def test_corrupt_state_without_backup_starts_empty_and_preserves_file(tmp_path):
+    (tmp_path / "state.json").write_text("garbage", encoding="utf-8")
+    s = Store(tmp_path)
+    assert s.state["teams"] == [] and s.state["active_phase"] == 1
+    aside = list(tmp_path.glob("state.json.corrupt-*"))
+    assert len(aside) == 1 and aside[0].read_text(encoding="utf-8") == "garbage"
+
+
+def test_save_keeps_previous_good_file_as_bak(tmp_path):
+    s = Store(tmp_path)
+    s.add_team("A")
+    s.add_team("B")
+    bak = json.loads((tmp_path / "state.json.bak").read_text(encoding="utf-8"))
+    assert [t["name"] for t in bak["teams"]] == ["A"]
+
+
+def test_pause_after_expiry_advances_first(tmp_path):
+    now = [0]
+    s = Store(tmp_path, clock=lambda: now[0])
+    a, b = s.add_team("A"), s.add_team("B")
+    s.set_order(1, [a["id"], b["id"]])
+    s.timer_action("start")
+    now[0] = 1_800_001
+    s.timer_action("pause")
+    slot = s.state["slot"]
+    assert slot["index"] == 1 and not slot["running"]
+    assert slot["remaining_ms"] == 1_800_000
+    assert s.current_and_next()[0]["id"] == b["id"]
+
+
+def test_delete_earlier_team_keeps_current_team(tmp_path):
+    now = [0]
+    s = Store(tmp_path, clock=lambda: now[0])
+    a, b, c = s.add_team("A"), s.add_team("B"), s.add_team("C")
+    s.set_order(1, [a["id"], b["id"], c["id"]])
+    s.timer_action("next")
+    s.timer_action("start")
+    now[0] = 100_000
+    s.delete_team(a["id"])
+    slot = s.state["slot"]
+    assert slot["index"] == 0 and slot["running"] and slot["started_at"] == 0
+    assert s.current_and_next()[0]["id"] == b["id"]
+    assert timer.remaining(slot, now[0]) == 1_700_000
+
+
+def test_reorder_keeps_current_team(tmp_path):
+    now = [0]
+    s = Store(tmp_path, clock=lambda: now[0])
+    a, b, c = s.add_team("A"), s.add_team("B"), s.add_team("C")
+    s.set_order(1, [a["id"], b["id"], c["id"]])
+    s.timer_action("next")
+    s.timer_action("start")
+    s.set_order(1, [b["id"], c["id"], a["id"]])
+    assert s.state["slot"]["index"] == 0 and s.state["slot"]["running"]
+    s.set_order(1, [c["id"], a["id"], b["id"]])
+    assert s.state["slot"]["index"] == 2 and s.state["slot"]["running"]
+    assert s.current_and_next()[0]["id"] == b["id"]
+
+
+def test_order_change_in_inactive_phase_does_not_move_slot(tmp_path):
+    s = Store(tmp_path)
+    a, b = s.add_team("A"), s.add_team("B")
+    s.set_order(1, [a["id"], b["id"]])
+    s.timer_action("next")
+    s.set_order(2, [b["id"], a["id"]])
+    assert s.state["slot"]["index"] == 1
+
+
+def test_next_right_after_expiry_does_not_skip_a_team(tmp_path):
+    now = [0]
+    s = Store(tmp_path, clock=lambda: now[0])
+    ids = [s.add_team(n)["id"] for n in "ABC"]
+    s.set_order(1, ids)
+    s.timer_action("start")
+    now[0] = 1_800_001
+    s.timer_action("next")      # auto-advance already moved to B
+    assert s.state["slot"]["index"] == 1
