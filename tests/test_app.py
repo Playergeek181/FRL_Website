@@ -74,3 +74,86 @@ def test_not_found_and_bad_body(client):
     r = client.post("/api/phase", data="not json", content_type="application/json")
     assert r.status_code == 400
     assert client.post("/api/orders/1", json={"team_ids": "x"}).status_code == 400
+
+
+def _mk(client, name):
+    return client.post("/api/teams", data={"name": name}).get_json()["teams"][-1]["id"]
+
+
+def _att(client, team, bases):
+    return client.post("/api/attempts", json={"team_id": team, "phase": 1,
+        "inputs": dict(bases=bases, repeats=0, returned=False, open_hw=False)}).get_json()
+
+
+def _rank(s):
+    return {r["team_id"]: r for r in s["ranking"]}
+
+
+def test_delete_best_attempt_updates_ranking(client):
+    a, b = _mk(client, "A"), _mk(client, "B")
+    _att(client, a, 2)
+    s = _att(client, a, 5)
+    s = _att(client, b, 3)
+    best = max((x for x in s["attempts"] if x["team_id"] == a), key=lambda x: x["points"])
+    assert _rank(s)[a]["position"] == 1 and _rank(s)[a]["phase_points"]["1"] == 25
+    s = client.delete(f"/api/attempts/{best['id']}").get_json()
+    assert best["id"] not in [x["id"] for x in s["attempts"]]
+    r = _rank(s)
+    assert r[b]["position"] == 1 and r[b]["phase_points"]["1"] == 25 and r[b]["total"] == 25
+    assert r[a]["position"] == 2 and r[a]["phase_points"]["1"] == 18 and r[a]["total"] == 18
+
+
+def test_put_lowering_best_attempt_updates_ranking(client):
+    a, b = _mk(client, "A"), _mk(client, "B")
+    s = _att(client, a, 5)
+    s = _att(client, b, 3)
+    aid = next(x["id"] for x in s["attempts"] if x["team_id"] == a)
+    assert _rank(s)[a]["position"] == 1
+    s = client.put(f"/api/attempts/{aid}", json={"inputs": dict(
+        bases=1, repeats=0, returned=False, open_hw=False)}).get_json()
+    r = _rank(s)
+    assert next(x for x in s["attempts"] if x["id"] == aid)["inputs"]["bases"] == 1
+    assert r[b]["position"] == 1 and r[b]["total"] == 25
+    assert r[a]["position"] == 2 and r[a]["phase_points"]["1"] == 18
+
+
+def _logo_post(client, url, name, data=b"\x89PNG"):
+    return client.post(url, data={"name": "A", "logo": (io.BytesIO(data), name)},
+                       content_type="multipart/form-data")
+
+
+def test_logo_replace_removes_old_file(client, tmp_path):
+    s = _logo_post(client, "/api/teams", "a.png").get_json()
+    tid = s["teams"][0]["id"]
+    assert (tmp_path / "logos" / f"{tid}.png").exists()
+    s = _logo_post(client, f"/api/teams/{tid}", "b.jpg").get_json()
+    assert s["teams"][0]["logo"] == f"/logos/{tid}.jpg"
+    assert not (tmp_path / "logos" / f"{tid}.png").exists()
+    assert (tmp_path / "logos" / f"{tid}.jpg").exists()
+
+
+def test_team_delete_removes_logo_file(client, tmp_path):
+    tid = _logo_post(client, "/api/teams", "a.png").get_json()["teams"][0]["id"]
+    assert (tmp_path / "logos" / f"{tid}.png").exists()
+    client.delete(f"/api/teams/{tid}")
+    assert not list((tmp_path / "logos").glob(f"{tid}.*"))
+
+
+def test_oversized_upload_413_json(client):
+    r = _logo_post(client, "/api/teams", "a.png", data=b"0" * (5 * 1024 * 1024 + 10))
+    assert r.status_code == 413 and r.get_json()["errors"]
+    assert client.get("/api/state").get_json()["teams"] == []
+
+
+def test_open_hw_default_create_and_edit(client):
+    s = client.post("/api/teams", data={"name": "A", "open_hw_default": "true"}).get_json()
+    tid = s["teams"][0]["id"]
+    assert s["teams"][0]["open_hw_default"] is True
+    s = client.post("/api/teams", data={"name": "B"}).get_json()
+    assert s["teams"][1]["open_hw_default"] is False
+    s = client.post(f"/api/teams/{tid}", data={"open_hw_default": "false"}).get_json()
+    assert s["teams"][0]["open_hw_default"] is False and s["teams"][0]["name"] == "A"
+    s = client.post(f"/api/teams/{tid}", data={"open_hw_default": "1"}).get_json()
+    assert s["teams"][0]["open_hw_default"] is True
+    s = client.post(f"/api/teams/{tid}", data={"name": "Z"}).get_json()
+    assert s["teams"][0]["name"] == "Z" and s["teams"][0]["open_hw_default"] is True
