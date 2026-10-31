@@ -19,9 +19,10 @@ Os dados ficam em `data/` (`state.json` e `logos/`). Para usar outra pasta, defi
 
 ## Raspberry Pi (Raspberry Pi OS Bookworm)
 
-1. Copie a pasta do projeto para o Pi (ex.: `/home/pi/FRL_Website`) e rode os mesmos comandos de venv acima (`python3 -m venv .venv` e `pip install -r requirements.txt`).
+1. Copie a pasta do projeto para o Pi (ex.: `/home/pi/FRL_Website`) e rode os mesmos comandos de venv acima (`python3 -m venv .venv` e `pip install -r requirements.txt`). **Faça isso antes de ir para o local da competição:** a instalação baixa pacotes e precisa de internet; depois disso o placar funciona totalmente offline.
 2. Descubra o IP do Pi com `hostname -I`.
 3. O operador abre, em outro dispositivo na mesma rede: `http://<ip>:8000/controle`.
+4. **Acerte o relógio do Pi antes do evento.** O cronômetro usa o relógio do sistema; o Raspberry Pi não tem relógio próprio e, sem internet, pode iniciar com a hora errada e ser corrigido no meio de uma rodada. Confira com `date` (ajuste com `sudo date -s "2026-11-05 09:00:00"` se necessário). Recomenda-se um módulo RTC com bateria (o Pi 5 tem conector para bateria do RTC).
 
 ### Iniciar o servidor no boot (systemd)
 
@@ -61,7 +62,7 @@ Para a TV nunca precisar de clique ou F5, o autostart espera o servidor responde
 **labwc** (padrão nas imagens mais novas): crie/edite `~/.config/labwc/autostart` e adicione:
 
 ```
-sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8000/tv' &
+sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-infobars http://localhost:8000/tv' &
 ```
 
 Atenção: se `~/.config/labwc/autostart` existir, ele substitui o `/etc/xdg/labwc/autostart` do sistema. Se faltar algo (painel, papel de parede), copie o arquivo do sistema para lá e acrescente a linha acima.
@@ -70,10 +71,10 @@ Atenção: se `~/.config/labwc/autostart` existir, ele substitui o `/etc/xdg/lab
 
 ```ini
 [autostart]
-tv = sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8000/tv'
+tv = sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-infobars http://localhost:8000/tv'
 ```
 
-(Em ambos, troque `chromium-browser` por `chromium` se necessário.)
+(Em ambos, troque `chromium-browser` por `chromium` se necessário. A opção `--disable-session-crashed-bubble` evita o balão "restaurar páginas" depois de uma queda de energia.)
 
 ### Desativar o apagamento de tela
 
@@ -84,9 +85,18 @@ Se a tela ainda apagar (Wayland):
 - **labwc**: o apagamento vem de uma linha `swayidle` no autostart do sistema (`/etc/xdg/labwc/autostart`). Ao usar `~/.config/labwc/autostart` próprio, não copie essa linha (ou comente-a).
 - **Wayfire**: em `~/.config/wayfire.ini` adicione `[idle]` com `screensaver_timeout = -1` e `dpms_timeout = -1`.
 
+### Ensaio geral antes do evento
+
+Faça um ensaio completo no Pi e na TV reais, do jeito que serão usados:
+
+- Ligue tudo do zero (boot a frio) e confira que a TV abre o placar sozinha.
+- Cadastre equipes, inicie o cronômetro e, no meio de um slot, **tire o Pi da tomada**. Ao religar, a TV deve voltar ao placar com o cronômetro correto **sem nenhum clique**.
+- Confira que a tela não apaga depois de alguns minutos parada.
+
 ## Backup e nova competição
 
 - **Backup:** copie a pasta `data/` (ex.: `cp -r data data-backup-$(date +%F)`).
+- O servidor mantém sozinho uma cópia do último estado bom em `data/state.json.bak`. Se `state.json` estiver corrompido, ele usa o `.bak`, guarda o arquivo ruim como `state.json.corrupt-<data>` e registra um aviso no log (`journalctl -u frl.service`).
 - **Competição nova do zero:**
 
 ```bash
