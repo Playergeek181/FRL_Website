@@ -156,6 +156,7 @@
   }
 
   function renderForm() {
+    if (editingId && !editingAttempt()) { stopEdit(); return; }   // apagada em outro lugar
     var tid = selectedTeamId(), phase = editingId ? editingPhase() : state.phase;
     var key = [tid, phase, editingId].join("|");
     var team = tid ? teamById(tid) : null;
@@ -197,8 +198,9 @@
         row.appendChild(el("span", { className: "hint", textContent: f[3] }));
       }
       inp.dataset.kind = kind; inp.dataset.key = key;
-      inp.addEventListener("input", preview);
-      inp.addEventListener("change", preview);
+      var touch = function () { teamTouched = true; preview(); };  // parar de seguir a arena
+      inp.addEventListener("input", touch);
+      inp.addEventListener("change", touch);
       box.appendChild(row);
     });
   }
@@ -290,7 +292,7 @@
   }
 
   function startEdit(id) { editingId = id; formKey = ""; render(); }
-  function stopEdit() { editingId = null; formKey = ""; sig.attempts = null; render(); }
+  function stopEdit() { editingId = null; teamTouched = false; formKey = ""; sig.attempts = null; render(); }
 
   // -- ordem -----------------------------------------------------------
   function renderOrder() {
@@ -337,7 +339,8 @@
     var ul = $("teams-list");
     var key = JSON.stringify(state.teams) + JSON.stringify(bust);
     if (sig.teams === key) return;
-    if (ul.contains(document.activeElement)) return;   // não atrapalhar edição
+    var act0 = document.activeElement;                 // não atrapalhar edição de campos
+    if (act0 && ul.contains(act0) && act0.tagName === "INPUT") return;
     sig.teams = key;
     ul.textContent = "";
     state.teams.forEach(function (t) {
@@ -349,6 +352,7 @@
       var save = el("button", { textContent: "Salvar" });
       var del = el("button", { textContent: "Excluir", className: "danger" });
       save.onclick = function () {
+        save.blur();
         var fd = new FormData();
         fd.append("name", name.value);
         fd.append("open_hw_default", hw.checked ? "1" : "0");
@@ -360,6 +364,7 @@
         }));
       };
       del.onclick = function () {
+        del.blur();
         if (!confirm("Excluir a equipe \"" + t.name + "\" e suas tentativas?")) return;
         quiet(act(api("DELETE", "/api/teams/" + t.id)));
       };
@@ -390,6 +395,7 @@
     var wasEditing = !!editingId;
     quiet(act(p).then(function () {
       $("form-errors").textContent = "";
+      teamTouched = false;
       if (wasEditing) stopEdit(); else { formKey = ""; render(); }
     }));
   };
