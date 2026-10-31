@@ -11,7 +11,7 @@
 <div id="offline" hidden>sem conexão</div>
 <div id="toast" hidden></div>
 <header id="arena" class="panel">
-  <label>Fase
+  <label>Fase ativa
     <select id="phase-select">
       <option value="1">Fase 1</option>
       <option value="2">Fase 2</option>
@@ -33,6 +33,15 @@
 <main class="grid">
   <section class="panel" id="record">
     <h2 id="record-title">Registrar tentativa</h2>
+    <label class="row">Fase da tentativa
+      <select id="att-phase-select">
+        <option value="1">Fase 1</option>
+        <option value="2">Fase 2</option>
+        <option value="3">Fase 3</option>
+        <option value="4">Fase 4</option>
+      </select>
+      <span id="att-phase-note" class="warn"></span>
+    </label>
     <label class="row">Equipe <select id="team-select"></select></label>
     <div id="fields"></div>
     <div id="formula" class="formula"></div>

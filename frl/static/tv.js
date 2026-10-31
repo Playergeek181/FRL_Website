@@ -95,7 +95,7 @@
         tr.appendChild(d);
         return d;
       }
-      td(r.position);
+      td(r.position === null || r.position === undefined ? "–" : r.position);  // só quem pontuou tem posição
       var lc = td("");
       var lg = logoEl(r, r.team_id);
       lg.style.width = lg.style.height = (fs * 1.3) + "vh";

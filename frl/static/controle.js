@@ -30,7 +30,8 @@
   var editingId = null;               // tentativa em edição
   var formKey = "";                   // equipe|fase|edição do formulário atual
   var orderDraft = null, orderDirty = false, orderPhase = null;
-  var previewSeq = 0, bust = {};
+  var previewSeq = 0;
+  var attPhase = null, attPhaseTouched = false;  // fase do painel de tentativas (segue a ativa)
   var toastTimer = null;
 
   function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
@@ -45,7 +46,7 @@
     if (team.logo) {
       el = document.createElement("img");
       el.className = "logo"; el.alt = "";
-      el.src = team.logo + (bust[team.id] ? "?v=" + bust[team.id] : "");
+      el.src = team.logo;   // a URL já traz ?v=<mtime> do servidor
       el.onerror = function () { el.replaceWith(logoEl({ id: team.id, name: team.name })); };
     } else {
       el = document.createElement("span");
@@ -99,6 +100,7 @@
   function applyState(s) { state = s; receivedAt = Date.now(); render(); }
 
   function render() {
+    renderAttPhase();
     renderArena();
     renderTeamSelect();
     renderForm();
@@ -132,21 +134,38 @@
 
   function selectedTeamId() { return $("team-select").value || null; }
 
+  // fase usada por "Registrar tentativa" / "Tentativas": segue a fase ativa até o
+  // operador escolher outra (corrigir fase anterior sem mexer na TV/cronômetro)
+  function renderAttPhase() {
+    if (!attPhaseTouched || attPhase === null) attPhase = state.phase;
+    var sel = $("att-phase-select");
+    if (document.activeElement !== sel) sel.value = String(editingId ? editingPhase() : attPhase);
+    sel.disabled = !!editingId;
+    $("att-phase-note").textContent = attPhase !== state.phase ? "≠ fase ativa (" + state.phase + ")" : "";
+  }
+  function panelTeams() {   // equipes da ordem desta fase primeiro, depois as demais
+    var order = (state.orders[String(attPhase)] || []).filter(function (id) { return teamById(id); });
+    return order.map(teamById).concat(state.teams.filter(function (t) { return order.indexOf(t.id) < 0; }));
+  }
+
   function renderTeamSelect() {
     var s = $("team-select");
-    var key = JSON.stringify(state.teams.map(function (t) { return [t.id, t.name]; }));
-    var cur = state.current ? state.current.id : null;
+    var teams = panelTeams();
+    var key = JSON.stringify(teams.map(function (t) { return [t.id, t.name]; }));
+    // só segue a equipe da arena quando o painel está na fase ativa
+    var cur = state.current && attPhase === state.phase ? state.current.id : null;
     var prev = s.value;
     if (sig.teamSel !== key) {
       sig.teamSel = key;
       s.textContent = "";
-      state.teams.forEach(function (t) { s.appendChild(el("option", { value: t.id, textContent: t.name })); });
+      teams.forEach(function (t) { s.appendChild(el("option", { value: t.id, textContent: t.name })); });
       if (!teamById(prev)) teamTouched = false;
       s.value = teamTouched && teamById(prev) ? prev : "";
     } else if (teamTouched && !teamById(prev)) teamTouched = false;
     if (editingId) return;
     if (!teamTouched) {
-      var want = cur && teamById(cur) ? cur : (teamById(s.value) ? s.value : (state.teams[0] || {}).id);
+      var want = cur && teamById(cur) ? cur :
+        (teamById(prev) ? prev : (teamById(s.value) ? s.value : (teams[0] || {}).id));
       if (want) s.value = want;
     }
   }
@@ -157,11 +176,11 @@
 
   function renderForm() {
     if (editingId && !editingAttempt()) { stopEdit(); return; }   // apagada em outro lugar
-    var tid = selectedTeamId(), phase = editingId ? editingPhase() : state.phase;
+    var tid = selectedTeamId(), phase = editingId ? editingPhase() : attPhase;
     var key = [tid, phase, editingId].join("|");
     var team = tid ? teamById(tid) : null;
     $("record-title").textContent = editingId ? "Editar tentativa" :
-      "Registrar tentativa" + (team ? " – " + team.name : "");
+      "Registrar tentativa" + (team ? " – " + team.name : "") + ", Fase " + phase;
     $("cancel-edit").hidden = !editingId;
     $("save-attempt").textContent = editingId ? "Salvar alterações" : "Salvar tentativa";
     $("save-attempt").disabled = !tid;
@@ -174,7 +193,7 @@
   function editingAttempt() {
     return state.attempts.filter(function (a) { return a.id === editingId; })[0];
   }
-  function editingPhase() { var a = editingAttempt(); return a ? a.phase : state.phase; }
+  function editingPhase() { var a = editingAttempt(); return a ? a.phase : attPhase; }
   function editingInputs() { var a = editingAttempt(); return a ? a.inputs : null; }
 
   function buildFields(phase, values, team) {
@@ -213,7 +232,7 @@
     });
     return out;
   }
-  function currentPhase() { return editingId ? editingPhase() : state.phase; }
+  function currentPhase() { return editingId ? editingPhase() : attPhase; }
 
   function formulaText(phase, i) {
     var n = function (v) { return typeof v === "number" ? v : 0; };
@@ -259,7 +278,7 @@
   }
 
   function renderAttempts() {
-    var tid = selectedTeamId(), phase = state.phase;
+    var tid = selectedTeamId(), phase = attPhase;
     var team = tid ? teamById(tid) : null;
     $("attempts-title").textContent = "Tentativas" + (team ? " – " + team.name : "") + ", Fase " + phase;
     var list = team ? thisAttempts(tid, phase) : [];
@@ -337,7 +356,7 @@
   // -- equipes ---------------------------------------------------------
   function renderTeams() {
     var ul = $("teams-list");
-    var key = JSON.stringify(state.teams) + JSON.stringify(bust);
+    var key = JSON.stringify(state.teams);
     if (sig.teams === key) return;
     var act0 = document.activeElement;                 // não atrapalhar edição de campos
     if (act0 && ul.contains(act0) && act0.tagName === "INPUT") return;
@@ -357,9 +376,7 @@
         fd.append("name", name.value);
         fd.append("open_hw_default", hw.checked ? "1" : "0");
         if (file.files[0]) fd.append("logo", file.files[0]);
-        var hadFile = !!file.files[0];
         quiet(act(api("POST", "/api/teams/" + t.id, fd, true)).then(function () {
-          if (hadFile) bust[t.id] = Date.now();
           sig.teams = null; renderTeams();
         }));
       };
@@ -383,15 +400,27 @@
   });
   $("phase-select").onchange = function () {
     var p = parseInt(this.value, 10);
+    if (p === state.phase) { this.blur(); return; }
+    if (!confirm("Mudar a fase ativa reinicia o cronômetro da arena. Continuar?")) {
+      this.value = String(state.phase); this.blur(); return;
+    }
     if (editingId) stopEdit();
+    attPhaseTouched = false;            // painel de tentativas volta a seguir a fase ativa
     quiet(act(api("POST", "/api/phase", { phase: p })));
     this.blur();
+  };
+  $("att-phase-select").onchange = function () {   // não chama /api/phase: TV e cronômetro intactos
+    attPhase = parseInt(this.value, 10);
+    attPhaseTouched = attPhase !== state.phase;
+    teamTouched = false; formKey = ""; sig.attempts = null;
+    this.blur();
+    render();
   };
   $("team-select").onchange = function () { teamTouched = true; formKey = ""; render(); };
   $("save-attempt").onclick = function () {
     var inputs = readInputs(), p;
     if (editingId) p = api("PUT", "/api/attempts/" + editingId, { inputs: inputs });
-    else p = api("POST", "/api/attempts", { team_id: selectedTeamId(), phase: state.phase, inputs: inputs });
+    else p = api("POST", "/api/attempts", { team_id: selectedTeamId(), phase: attPhase, inputs: inputs });
     var wasEditing = !!editingId;
     quiet(act(p).then(function () {
       $("form-errors").textContent = "";
