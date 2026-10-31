@@ -25,7 +25,7 @@ Os dados ficam em `data/` (`state.json` e `logos/`). Para usar outra pasta, defi
 
 ### Iniciar o servidor no boot (systemd)
 
-Crie `/etc/systemd/system/frl.service` (ajuste `User` e os caminhos para o seu usuario/pasta):
+Crie `/etc/systemd/system/frl.service` (ajuste `User` e os caminhos para o seu usuário/pasta):
 
 ```ini
 [Unit]
@@ -43,7 +43,7 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
-Ative:
+Ative o serviço:
 
 ```bash
 sudo systemctl daemon-reload
@@ -54,27 +54,40 @@ journalctl -u frl.service -f   # logs
 
 ### Modo quiosque na TV (Chromium)
 
-O navegador e `chromium-browser` (em imagens mais novas, `chromium`). Use o que existir no seu Pi.
+O navegador é `chromium-browser`; em imagens mais novas o binário se chama `chromium`. **Troque por `chromium` se `chromium-browser` não existir** (teste com `which chromium-browser chromium`).
 
-**labwc** (padrao nas imagens mais novas): adicione ao `~/.config/labwc/autostart`:
+Para a TV nunca precisar de clique ou F5, o autostart espera o servidor responder antes de abrir o Chromium (senão, se o navegador subir primeiro, aparece uma página de erro).
+
+**labwc** (padrão nas imagens mais novas): crie/edite `~/.config/labwc/autostart` e adicione:
 
 ```
-chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8000/tv &
+sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8000/tv' &
 ```
 
-**Wayfire**: em `~/.config/wayfire.ini`, na secao `[autostart]`:
+Atenção: se `~/.config/labwc/autostart` existir, ele substitui o `/etc/xdg/labwc/autostart` do sistema. Se faltar algo (painel, papel de parede), copie o arquivo do sistema para lá e acrescente a linha acima.
+
+**Wayfire**: em `~/.config/wayfire.ini`, na seção `[autostart]`:
 
 ```ini
 [autostart]
-tv = chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8000/tv
+tv = sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8000/tv'
 ```
 
-Desative o apagamento de tela: `sudo raspi-config` -> Display Options -> Screen Blanking -> No (desativado), e reinicie.
+(Em ambos, troque `chromium-browser` por `chromium` se necessário.)
 
-## Backup e nova competicao
+### Desativar o apagamento de tela
+
+Rode `sudo raspi-config` e vá em **Display Options → Screen Blanking → No** (desativar); reinicie o Pi.
+
+Se a tela ainda apagar (Wayland):
+
+- **labwc**: o apagamento vem de uma linha `swayidle` no autostart do sistema (`/etc/xdg/labwc/autostart`). Ao usar `~/.config/labwc/autostart` próprio, não copie essa linha (ou comente-a).
+- **Wayfire**: em `~/.config/wayfire.ini` adicione `[idle]` com `screensaver_timeout = -1` e `dpms_timeout = -1`.
+
+## Backup e nova competição
 
 - **Backup:** copie a pasta `data/` (ex.: `cp -r data data-backup-$(date +%F)`).
-- **Competicao nova do zero:**
+- **Competição nova do zero:**
 
 ```bash
 sudo systemctl stop frl.service
