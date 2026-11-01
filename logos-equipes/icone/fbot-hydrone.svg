@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>FBOT @Hydrone</title>
+  <rect width="512" height="512" fill="#023e58"/>
+  <g transform="translate(256 256) scale(1.25) translate(-256 -195)">
+      <path d="M256 70 C300 134 344 180 344 228 A88 88 0 0 1 168 228 C168 180 212 134 256 70 Z" fill="#48cae4"/>
+      <g fill="#023e58" transform="translate(256 226)">
+        <path d="M0 -6 C10 -40 34 -58 44 -46 C52 -34 26 -14 0 -6 Z"/>
+        <path d="M0 -6 C10 -40 34 -58 44 -46 C52 -34 26 -14 0 -6 Z" transform="rotate(120)"/>
+        <path d="M0 -6 C10 -40 34 -58 44 -46 C52 -34 26 -14 0 -6 Z" transform="rotate(240)"/>
+        <circle r="12"/></g>
+      <path d="M206 168 q-14 26 -12 50" stroke="#e0fbfc" stroke-width="9" fill="none" stroke-linecap="round" opacity=".7"/></g>
+</svg>

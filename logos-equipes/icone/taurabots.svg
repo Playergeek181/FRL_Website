@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>TauraBots</title>
+  <rect width="512" height="512" fill="#7a1414"/>
+  <g transform="translate(256 256) scale(1.25) translate(-256 -195)">
+      <path d="M190 152 C150 148 130 126 136 94 C152 116 172 122 200 122 Z" fill="#fff3e0"/>
+      <path d="M322 152 C362 148 382 126 376 94 C360 116 340 122 312 122 Z" fill="#fff3e0"/>
+      <path d="M180 116 H332 V214 C332 262 296 296 256 308 C216 296 180 262 180 214 Z" fill="#fff3e0"/>
+      <rect x="196" y="160" width="120" height="34" rx="17" fill="#7a1414"/>
+      <rect x="212" y="170" width="88" height="14" rx="7" fill="#f2c14e"/>
+      <path d="M232 244 h48 l-10 22 h-28 Z" fill="#7a1414"/></g>
+</svg>

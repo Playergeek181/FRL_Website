@@ -1,7 +1,6 @@
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
-  var PALETTE = ["#e76f51", "#2a9d8f", "#8338ec", "#f4a261", "#3a86ff", "#e63946", "#06d6a0", "#ff006e", "#8ac926", "#fb8500"];
   var FIELDS = {
     1: [["int", "bases", "Bases visitadas (1ª vez)", 6, "× 20"],
         ["int", "repeats", "Pousos repetidos", null, "× −5"],
@@ -32,6 +31,9 @@
   var orderDraft = null, orderDirty = false, orderPhase = null;
   var previewSeq = 0;
   var attPhase = null, attPhaseTouched = false;  // fase do painel de tentativas (segue a ativa)
+  var ophase = null, ophaseTouched = false;      // fase do painel de ordem (segue a ativa)
+  var orderEditing = false;                      // lista de ordem só vira editável em "Editar ordem"
+  var LOW_MS = 300000;                           // últimos 5 min: mesmo limiar da TV (tv.js)
   var toastTimer = null;
 
   function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
@@ -51,7 +53,9 @@
     } else {
       el = document.createElement("span");
       el.className = "logo";
-      el.style.background = PALETTE[hash(String(team.id)) % PALETTE.length];
+      var h = (hash(String(team.id)) % 12) * 30;   // mesmo matiz da TV
+      el.style.background = "hsl(" + h + " 32% 17%)";
+      el.style.color = "hsl(" + h + " 70% 78%)";
       el.textContent = initials(team.name);
     }
     return el;
@@ -69,12 +73,28 @@
     return pad(m, 2) + ":" + pad(s % 60, 2) + "." + pad(ms % 1000, 3);
   }
   function teamById(id) { return state.teams.filter(function (t) { return t.id === id; })[0]; }
-  function toast(msgs) {
+  // kind: "error" (padrão) ou "ok"; action: { label, run } vira um botão (ex.: Desfazer).
+  function toast(msgs, kind, action) {
     var t = $("toast");
-    t.textContent = [].concat(msgs).join(" ");
+    t.textContent = "";
+    t.className = kind === "ok" ? "ok" : "error";
+    t.appendChild(el("span", { textContent: [].concat(msgs).join(" ") }));
+    if (action) {
+      var b = el("button", { textContent: action.label });
+      b.onclick = function () { t.hidden = true; action.run(); };
+      t.appendChild(b);
+    }
+    var close = el("button", { className: "x", title: "fechar", ariaLabel: "fechar",
+      innerHTML: '<svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' });
+    close.onclick = function () { t.hidden = true; };
+    t.appendChild(close);
     t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, 6000);
+    toastTimer = setTimeout(function () { t.hidden = true; }, action ? 8000 : (kind === "ok" ? 4000 : 10000));
+  }
+  function ok(msg, action) { toast(msg, "ok", action); }
+  function teamPhaseAttempts(st, teamId, phase) {
+    return st.attempts.filter(function (a) { return a.team_id === teamId && a.phase === phase; });
   }
 
   // -- API -------------------------------------------------------------
@@ -99,7 +119,16 @@
   function quiet(p) { return p.catch(function () {}); }
 
   // -- renderização ----------------------------------------------------
-  function applyState(s) { state = s; receivedAt = Date.now(); render(); }
+  var prepDecided = false;
+  function applyState(s) {
+    state = s; receivedAt = Date.now();
+    if (!prepDecided) {
+      prepDecided = true;
+      var needs = !s.teams.length || !(s.orders[String(s.phase)] || []).length;
+      $("prep").open = needs || prepPref === "1";
+    }
+    render();
+  }
 
   function render() {
     renderAttPhase();
@@ -119,7 +148,7 @@
     if (!state) return;
     var ms = remainingMs(), c = $("countdown");
     c.textContent = fmt(ms);
-    c.classList.toggle("low", ms <= 60000);
+    c.classList.toggle("low", ms < LOW_MS);
   }
 
   function renderArena() {
@@ -127,10 +156,12 @@
     if (document.activeElement !== sel) sel.value = String(state.phase);
     $("phase-name").textContent = state.phase_name;
     $("arena-name").textContent = state.current ? state.current.name :
-      (state.phase_finished ? "fase encerrada" : "—");
+      (state.phase_finished ? "Fase encerrada" : "—");
     $("next-name").textContent = state.next ? state.next.name : "—";
     $("b-start").disabled = state.timer.running || !state.current;
     $("b-pause").disabled = !state.timer.running;
+    $("b-reset").disabled = !state.current;
+    $("b-next").disabled = !state.current;
     renderCountdown();
   }
 
@@ -143,7 +174,8 @@
     var sel = $("att-phase-select");
     if (document.activeElement !== sel) sel.value = String(editingId ? editingPhase() : attPhase);
     sel.disabled = !!editingId;
-    $("att-phase-note").textContent = attPhase !== state.phase ? "≠ fase ativa (" + state.phase + ")" : "";
+    $("att-phase-note").textContent = attPhase !== state.phase ?
+      "Registrando na Fase " + attPhase + "; a arena está na Fase " + state.phase + "." : "";
   }
   function panelTeams() {   // equipes da ordem desta fase primeiro, depois as demais
     var order = (state.orders[String(attPhase)] || []).filter(function (id) { return teamById(id); });
@@ -185,7 +217,10 @@
       "Registrar tentativa" + (team ? " – " + team.name : "") + ", Fase " + phase;
     $("cancel-edit").hidden = !editingId;
     $("save-attempt").textContent = editingId ? "Salvar alterações" : "Salvar tentativa";
-    $("save-attempt").disabled = !tid;
+    var full = !editingId && team && thisAttempts(tid, phase).length >= 3;
+    $("save-attempt").disabled = !tid || full;
+    $("save-note").textContent = full ? team.name + " já tem 3 tentativas na Fase " + phase +
+      ". Para corrigir, use Editar em uma delas." : "";
     $("team-select").disabled = !!editingId;
     if (key === formKey) return;
     formKey = key;
@@ -296,17 +331,24 @@
       li.appendChild(el("span", { className: "att-label", textContent: "T" + (k + 1) }));
       if (!a) { li.appendChild(el("span", { className: "att-pts muted", textContent: "—" })); ul.appendChild(li); continue; }
       var pts = el("span", { className: "att-pts" }, [String(a.points) + " "]);
-      if (k === best) pts.appendChild(el("span", { className: "star", textContent: "★", title: "melhor" }));
+      if (k === best) pts.appendChild(el("span", { className: "star", textContent: "melhor" }));
       li.appendChild(pts);
+      li.appendChild(el("span", { className: "att-calc", textContent: formulaText(a.phase, a.inputs) }));
       var ed = el("button", { textContent: "Editar" });
       ed.onclick = (function (id) { return function () { startEdit(id); }; })(a.id);
-      var del = el("button", { textContent: "Apagar", className: "danger" });
-      del.onclick = (function (id, n) { return function () {
-        if (!confirm("Apagar a tentativa T" + n + "?")) return;
-        if (editingId === id) stopEdit();
-        quiet(act(api("DELETE", "/api/attempts/" + id)));
-      }; })(a.id, k + 1);
-      li.appendChild(ed); li.appendChild(del);
+      var del = el("button", { textContent: "Excluir", className: "danger" });
+      del.onclick = (function (att, n, tname) { return function () {
+        var what = "T" + n + " de " + tname + " (Fase " + att.phase + ", " + att.points + " pts)";
+        if (!confirm("Excluir " + what + "?")) return;
+        if (editingId === att.id) stopEdit();
+        quiet(act(api("DELETE", "/api/attempts/" + att.id)).then(function () {
+          ok(what + " excluída.", { label: "Desfazer", run: function () {
+            quiet(act(api("POST", "/api/attempts", { team_id: att.team_id, phase: att.phase, inputs: att.inputs }))
+              .then(function () { ok("Tentativa restaurada (" + att.points + " pts)."); }));
+          } });
+        }));
+      }; })(a, k + 1, team.name);
+      li.appendChild(el("span", { className: "att-actions" }, [ed, del]));
       if (a.id === editingId) li.appendChild(el("span", { className: "muted", textContent: "em edição" }));
       ul.appendChild(li);
     }
@@ -317,12 +359,22 @@
 
   // -- ordem -----------------------------------------------------------
   function renderOrder() {
-    var phase = state.phase, server = (state.orders[String(phase)] || []).filter(function (id) { return teamById(id); });
-    if (orderPhase !== phase) { orderPhase = phase; orderDirty = false; orderDraft = null; }
+    if (!ophaseTouched || ophase === null) ophase = state.phase;
+    var osel = $("order-phase-select");
+    if (document.activeElement !== osel) osel.value = String(ophase);
+    var phase = ophase, server = (state.orders[String(phase)] || []).filter(function (id) { return teamById(id); });
+    if (orderPhase !== phase) { orderPhase = phase; orderDirty = false; orderDraft = null; orderEditing = false; }
     if (!orderDirty || orderDraft === null) orderDraft = server.slice();
     else orderDraft = orderDraft.filter(function (id) { return teamById(id); });
-    $("order-title").textContent = "Ordem da fase " + phase;
-    var key = JSON.stringify([phase, orderDraft, orderDirty, state.teams.map(function (t) { return [t.id, t.name]; })]);
+    $("order-title").textContent = "Ordem de voo";
+    $("order-note").textContent = phase !== state.phase ?
+      "Esta é a ordem da Fase " + phase + "; a arena está na Fase " + state.phase + ". Salvar não muda a arena." : "";
+    $("order-view").hidden = orderEditing;
+    $("order-editing").hidden = !orderEditing;
+    $("order-edit").textContent = orderDraft.length ? "Editar ordem" : "Montar ordem";
+    $("order-empty").hidden = orderDraft.length > 0;
+    $("order-save").disabled = !orderDirty;
+    var key = JSON.stringify([phase, orderDraft, orderDirty, orderEditing, state.teams.map(function (t) { return [t.id, t.name]; })]);
     $("order-dirty").textContent = orderDirty ? "alterações não salvas" : "";
     if (sig.order === key) return;
     sig.order = key;
@@ -331,14 +383,17 @@
     orderDraft.forEach(function (id, idx) {
       var li = el("li");
       li.appendChild(el("span", { className: "n", textContent: teamById(id).name }));
-      var up = el("button", { textContent: "↑", title: "subir", disabled: idx === 0 });
-      var dn = el("button", { textContent: "↓", title: "descer", disabled: idx === orderDraft.length - 1 });
-      var rm = el("button", { textContent: "✕", title: "remover da ordem" });
+      ol.appendChild(li);
+      if (!orderEditing) return;
+      var nm = teamById(id).name;
+      var up = el("button", { textContent: "↑", title: "subir", ariaLabel: "subir " + nm, disabled: idx === 0 });
+      var dn = el("button", { textContent: "↓", title: "descer", ariaLabel: "descer " + nm, disabled: idx === orderDraft.length - 1 });
+      var rm = el("button", { title: "remover da ordem", ariaLabel: "remover " + nm + " da ordem",
+        innerHTML: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' });
       up.onclick = function () { moveOrder(idx, -1); };
       dn.onclick = function () { moveOrder(idx, 1); };
       rm.onclick = function () { orderDraft.splice(idx, 1); orderDirty = true; sig.order = null; renderOrder(); };
       [up, dn, rm].forEach(function (b) { li.appendChild(b); });
-      ol.appendChild(li);
     });
     var add = $("order-add"), prev = add.value;
     add.textContent = "";
@@ -347,6 +402,25 @@
     });
     if (prev && Array.prototype.some.call(add.options, function (o) { return o.value === prev; })) add.value = prev;
     $("order-add-btn").disabled = !add.options.length;
+    $("order-add-row").hidden = !add.options.length;
+    $("order-shuffle").disabled = (orderDraft.length || state.teams.length) < 2;
+  }
+  // Fisher–Yates com crypto.getRandomValues: sorteio justo, sem viés do Math.random.
+  function randInt(n) {
+    var buf = new Uint32Array(1), lim = Math.floor(4294967296 / n) * n, x;
+    do { crypto.getRandomValues(buf); x = buf[0]; } while (x >= lim);
+    return x % n;
+  }
+  function shuffleOrder() {
+    var n = state.attempts.filter(function (a) { return a.phase === ophase; }).length;
+    if (n && !confirm("Já há " + n + (n === 1 ? " tentativa registrada" : " tentativas registradas") +
+        " na Fase " + ophase + ". Sortear a ordem mesmo assim?")) return;
+    // lista vazia: sorteia todas as equipes cadastradas
+    var list = orderDraft.length ? orderDraft.slice() : state.teams.map(function (t) { return t.id; });
+    for (var i = list.length - 1; i > 0; i--) {
+      var j = randInt(i + 1), t = list[i]; list[i] = list[j]; list[j] = t;
+    }
+    orderDraft = list; orderDirty = true; sig.order = null; renderOrder();
   }
   function moveOrder(idx, d) {
     var j = idx + d;
@@ -364,12 +438,17 @@
     if (act0 && ul.contains(act0) && act0.tagName === "INPUT") return;
     sig.teams = key;
     ul.textContent = "";
+    if (state.teams.length) ul.appendChild(el("li", { className: "teams-head", ariaHidden: "true" },
+      [el("span"), el("span", { textContent: "Equipe" }), el("span", { textContent: "Open-hardware por padrão" })]));
     state.teams.forEach(function (t) {
-      var li = el("li");
+      var li = el("li", { className: "team-row" });
       li.appendChild(logoEl(t));
-      var name = el("input", { type: "text", value: t.name });
+      var name = el("input", { type: "text", value: t.name, ariaLabel: "Nome da equipe" });
       var hw = el("input", { type: "checkbox", checked: t.open_hw_default });
       var file = el("input", { type: "file", accept: ".png,.jpg,.jpeg,.webp,.svg" });
+      var fileLbl = el("label", { className: "file" }, [file, el("span", { className: "file-btn", textContent: "Trocar logo" }),
+        el("span", { className: "file-name", textContent: "" })]);
+      file.onchange = function () { fileName(file); };
       var save = el("button", { textContent: "Salvar" });
       var del = el("button", { textContent: "Excluir", className: "danger" });
       save.onclick = function () {
@@ -380,6 +459,7 @@
         if (file.files[0]) fd.append("logo", file.files[0]);
         quiet(act(api("POST", "/api/teams/" + t.id, fd, true)).then(function () {
           sig.teams = null; renderTeams();
+          ok("Equipe " + name.value.trim() + " salva.");
         }));
       };
       del.onclick = function () {
@@ -387,17 +467,44 @@
         if (!confirm("Excluir a equipe \"" + t.name + "\" e suas tentativas?")) return;
         quiet(act(api("DELETE", "/api/teams/" + t.id)));
       };
-      var hwl = el("label", { className: "check" }, [hw, "open-hardware por padrão"]);
-      [name, hwl, file, save, del].forEach(function (x) { li.appendChild(x); });
+      hw.setAttribute("aria-label", "open-hardware por padrão: " + t.name);
+      var hwl = el("label", { className: "check hw" }, [hw]);
+      [name, hwl, fileLbl, save, del].forEach(function (x) { li.appendChild(x); });
       ul.appendChild(li);
     });
   }
 
+  function fileName(input) {
+    var span = input.parentNode.querySelector(".file-name");
+    if (!span) return;
+    span.textContent = input.files[0] ? input.files[0].name : (input.id === "new-logo" ? "nenhum arquivo" : "");
+  }
+
   // -- eventos ---------------------------------------------------------
+  $("new-logo").onchange = function () { fileName(this); };
+  // Preparação: aberta quando falta algo (sem equipes ou sem ordem na fase ativa); senão lembra a escolha.
+  var prepPref = null;
+  try { prepPref = localStorage.getItem("frl-prep-open"); } catch (e) {}
+  $("prep").addEventListener("toggle", function () {
+    try { localStorage.setItem("frl-prep-open", this.open ? "1" : "0"); } catch (e) {}
+  });
+  function timerConfirm(action) {
+    var cur = state.current, nxt = state.next;
+    if (!cur) return null;
+    if (action === "next") return nxt ?
+      "Encerrar " + cur.name + " e chamar " + nxt.name + "? O cronômetro volta a 30:00." :
+      "Encerrar " + cur.name + "? É a última equipe da fase.";
+    if (action === "reset") return "Reiniciar o cronômetro de " + cur.name + "? Ele volta a 30:00 e o tempo usado se perde.";
+    return null;
+  }
   document.querySelectorAll("[data-timer]").forEach(function (b) {
     b.onclick = function () {
-      if (b.dataset.confirm && !confirm(b.dataset.confirm)) return;
-      quiet(act(api("POST", "/api/timer/" + b.dataset.timer)));
+      var action = b.dataset.timer, q = timerConfirm(action), cur = state.current;
+      if (q && !confirm(q)) return;
+      quiet(act(api("POST", "/api/timer/" + action)).then(function (s) {
+        if (action === "next") ok(s.current ? "Na arena: " + s.current.name + "." : "Fase encerrada: todas as equipes voaram.");
+        else if (action === "reset" && cur) ok("Cronômetro de " + cur.name + " reiniciado.");
+      }));
     };
   });
   $("phase-select").onchange = function () {
@@ -423,8 +530,14 @@
     var inputs = readInputs(), p;
     if (editingId) p = api("PUT", "/api/attempts/" + editingId, { inputs: inputs });
     else p = api("POST", "/api/attempts", { team_id: selectedTeamId(), phase: attPhase, inputs: inputs });
-    var wasEditing = !!editingId;
-    quiet(act(p).then(function () {
+    var wasEditing = !!editingId, tid = selectedTeamId(), team = teamById(tid);
+    var ph = editingId ? editingPhase() : attPhase, eid = editingId;
+    quiet(act(p).then(function (s) {
+      var list = teamPhaseAttempts(s, tid, ph);
+      var idx = wasEditing ? list.map(function (a) { return a.id; }).indexOf(eid) : list.length - 1;
+      var a = list[idx];
+      if (a && team) ok("T" + (idx + 1) + (wasEditing ? " atualizada: " : " salva: ") + team.name +
+        ", Fase " + ph + ", " + a.points + " pts.");
       $("form-errors").textContent = "";
       teamTouched = false;
       if (wasEditing) stopEdit(); else { formKey = ""; render(); }
@@ -436,10 +549,24 @@
     if (!v) return;
     orderDraft.push(v); orderDirty = true; sig.order = null; renderOrder();
   };
+  $("order-shuffle").onclick = shuffleOrder;
+  $("order-edit").onclick = function () { orderEditing = true; sig.order = null; renderOrder(); };
+  $("order-cancel").onclick = function () {
+    if (orderDirty && !confirm("Descartar as alterações não salvas da ordem?")) return;
+    orderEditing = false; orderDirty = false; orderDraft = null; sig.order = null; renderOrder();
+  };
+  $("order-phase-select").onchange = function () {
+    var p = parseInt(this.value, 10);
+    if (orderDirty && !confirm("Descartar as alterações não salvas da ordem?")) { this.value = String(ophase); return; }
+    ophase = p; ophaseTouched = p !== state.phase; sig.order = null;
+    this.blur();
+    renderOrder();
+  };
   $("order-save").onclick = function () {
-    var phase = state.phase;
+    var phase = ophase;
     quiet(act(api("POST", "/api/orders/" + phase, { team_ids: orderDraft })).then(function () {
-      orderDirty = false; sig.order = null; renderOrder();
+      orderDirty = false; orderEditing = false; sig.order = null; renderOrder();
+      ok("Ordem da Fase " + phase + " salva.");
     }));
   };
   $("team-add").onsubmit = function (e) {
@@ -453,6 +580,8 @@
     if (f) fd.append("logo", f);
     quiet(act(api("POST", "/api/teams", fd, true)).then(function () {
       $("team-add").reset();
+      fileName($("new-logo"));
+      ok("Equipe " + name + " adicionada.");
     }));
   };
 

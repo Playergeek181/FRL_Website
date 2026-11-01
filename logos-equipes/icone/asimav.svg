@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>AsiMAV</title>
+  <rect width="512" height="512" fill="#102a43"/>
+  <g transform="translate(256 256) scale(1.25) translate(-256 -195)">
+      <path d="M256 84 L392 262 L256 226 L120 262 Z" fill="#2ec4b6"/>
+      <path d="M256 84 L256 226 L120 262 Z" fill="#25a59a"/>
+      <circle cx="256" cy="170" r="14" fill="#102a43"/>
+      <g stroke="#f0f4f8" stroke-width="8" stroke-linecap="round" opacity=".85">
+        <line x1="196" y1="288" x2="196" y2="312"/><line x1="256" y1="252" x2="256" y2="304"/>
+        <line x1="316" y1="288" x2="316" y2="312"/></g></g>
+</svg>

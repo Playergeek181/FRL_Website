@@ -1,4 +1,44 @@
+/* Inter (SIL OFL 1.1), bundled so the scoreboard keeps working offline. */
+@font-face {
+  font-family: "Inter";
+  src: url("/static/fonts/inter-latin-wght.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: block;
+}
+
+:root {
+  --ground: #000;
+  --surface: #111;
+  --raised: #2a2a2a;
+  --rule: #1f1f1f;
+  --control: #444;
+  --text: #fff;
+  --muted: #b4b4b4;
+  --faint: #949494;
+  --dim: #5e5e5e;
+  /* the one data hue: sky, for a flying-robot league */
+  --accent: #4cb3f0;
+  --negative: #e5484d;
+  --pill-negative-bg: #2c1a20; --pill-negative-ink: #f07a8e;
+  --pill-positive-bg: #10232f; --pill-positive-ink: #7cc8f5;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
-body { font-family: system-ui, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif; background: #0d1b2a; color: #fff; }
-.logo { border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; overflow: hidden; }
+[hidden] { display: none !important; }
+body {
+  font-family: "Inter", system-ui, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif;
+  background: var(--ground);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Team badge: logo image, or initials on a pale tint of the team's own hue (set inline from JS). */
+.logo {
+  border-radius: 50%; object-fit: cover; flex: none; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 600; letter-spacing: -.01em; background: var(--raised); color: var(--text);
+}
+
+.mark { display: inline-flex; align-items: center; gap: .55em; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.mark svg { flex: none; }

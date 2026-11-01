@@ -4,51 +4,82 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FRL 2026 - Controle</title>
+<link rel="preload" href="/static/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/common.css">
 <link rel="stylesheet" href="/static/controle.css">
 </head>
 <body>
-<div id="offline" hidden>sem conexão</div>
-<div id="toast" hidden></div>
-<header id="arena" class="panel">
-  <label>Fase ativa
-    <select id="phase-select">
-      <option value="1">Fase 1</option>
-      <option value="2">Fase 2</option>
-      <option value="3">Fase 3</option>
-      <option value="4">Fase 4</option>
-    </select>
-  </label>
-  <span id="phase-name" class="muted"></span>
-  <span class="inarena">Na arena: <b id="arena-name">—</b></span>
-  <span id="countdown">30:00</span>
-  <button id="b-start" data-timer="start">▶ Iniciar</button>
-  <button id="b-pause" data-timer="pause">⏸ Pausar</button>
-  <button id="b-plus" data-timer="add">+1 min</button>
-  <button id="b-reset" data-timer="reset" data-confirm="Reiniciar o cronômetro desta equipe?">↺ Reiniciar</button>
-  <button id="b-next" data-timer="next" data-confirm="Passar para a próxima equipe?">⏭ Próxima equipe</button>
-  <span class="next muted">Próxima: <span id="next-name">—</span></span>
+<div id="offline" hidden>Sem conexão com o servidor</div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<header id="top">
+  <h1 class="mark">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <circle cx="5" cy="5" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <circle cx="19" cy="5" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <circle cx="5" cy="19" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <circle cx="19" cy="19" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <path d="M7.5 7.5l9 9M16.5 7.5l-9 9" stroke="var(--accent)" stroke-width="2"/>
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1" fill="var(--accent)"/>
+    </svg>
+    Placar FRL 2026 <span class="sub">Controle</span>
+  </h1>
+  <a class="btn" href="/tv" target="_blank" rel="noopener">Abrir tela da TV</a>
 </header>
 
-<main class="grid">
-  <section class="panel" id="record">
-    <h2 id="record-title">Registrar tentativa</h2>
-    <label class="row">Fase da tentativa
-      <select id="att-phase-select">
+<section id="arena" class="panel" aria-label="Arena">
+  <div class="a-phase">
+    <label for="phase-select" class="lbl">Fase ativa</label>
+    <div class="a-phase-row">
+      <select id="phase-select">
         <option value="1">Fase 1</option>
         <option value="2">Fase 2</option>
         <option value="3">Fase 3</option>
         <option value="4">Fase 4</option>
       </select>
-      <span id="att-phase-note" class="warn"></span>
-    </label>
-    <label class="row">Equipe <select id="team-select"></select></label>
+      <span id="phase-name" class="muted"></span>
+    </div>
+  </div>
+  <div class="a-team">
+    <span class="lbl">Na arena</span>
+    <b id="arena-name">—</b>
+    <span class="next muted">A seguir: <span id="next-name">—</span></span>
+  </div>
+  <span id="countdown">30:00.000</span>
+  <div class="a-ctl">
+    <div class="a-grp" role="group" aria-label="Cronômetro">
+      <button id="b-start" class="primary" data-timer="start">Iniciar</button>
+      <button id="b-pause" data-timer="pause">Pausar</button>
+      <button id="b-plus" data-timer="add">+1 min</button>
+    </div>
+    <div class="a-grp" role="group" aria-label="Encerrar ou reiniciar">
+      <button id="b-reset" class="outline" data-timer="reset">Reiniciar</button>
+      <button id="b-next" class="outline" data-timer="next">Próxima equipe</button>
+    </div>
+  </div>
+</section>
+
+<main class="grid">
+  <section class="panel" id="record">
+    <h2 id="record-title">Registrar tentativa</h2>
+    <div class="pick">
+      <label class="stack">Fase da tentativa
+        <select id="att-phase-select">
+          <option value="1">Fase 1</option>
+          <option value="2">Fase 2</option>
+          <option value="3">Fase 3</option>
+          <option value="4">Fase 4</option>
+        </select>
+      </label>
+      <label class="stack grow">Equipe <select id="team-select"></select></label>
+    </div>
+    <span id="att-phase-note" class="warn"></span>
     <div id="fields"></div>
     <div id="formula" class="formula"></div>
     <div id="form-errors" class="errors"></div>
     <div class="row">
       <button id="save-attempt" class="primary">Salvar tentativa</button>
       <button id="cancel-edit" hidden>Cancelar edição</button>
+      <span id="save-note" class="note"></span>
     </div>
   </section>
 
@@ -56,28 +87,55 @@
     <h2 id="attempts-title">Tentativas</h2>
     <ul id="attempts-list" class="plain"></ul>
   </section>
-
-  <section class="panel" id="order">
-    <h2 id="order-title">Ordem da fase</h2>
-    <ol id="order-list"></ol>
-    <div class="row">
-      <select id="order-add"></select>
-      <button id="order-add-btn">Adicionar</button>
-    </div>
-    <div class="row"><button id="order-save" class="primary">Salvar ordem</button><span id="order-dirty" class="muted"></span></div>
-  </section>
-
-  <section class="panel" id="teams">
-    <h2>Equipes</h2>
-    <form id="team-add" class="row">
-      <input id="new-name" placeholder="Nome da equipe" required>
-      <input id="new-logo" type="file" accept=".png,.jpg,.jpeg,.webp,.svg">
-      <label class="check"><input id="new-hw" type="checkbox"> open-hardware por padrão</label>
-      <button class="primary">Adicionar equipe</button>
-    </form>
-    <ul id="teams-list" class="plain"></ul>
-  </section>
 </main>
+
+<details id="prep" class="prep">
+  <summary><span class="prep-h">Preparação</span> <span class="muted">ordem de voo e equipes</span></summary>
+  <div class="prep-grid">
+    <section class="panel" id="order">
+      <div class="order-head">
+        <h2 id="order-title">Ordem de voo</h2>
+        <label class="inline">Fase
+          <select id="order-phase-select">
+            <option value="1">Fase 1</option>
+            <option value="2">Fase 2</option>
+            <option value="3">Fase 3</option>
+            <option value="4">Fase 4</option>
+          </select>
+        </label>
+      </div>
+      <span id="order-note" class="warn"></span>
+      <ol id="order-list"></ol>
+      <p id="order-empty" class="muted" hidden>Nenhuma equipe na ordem desta fase.</p>
+      <div id="order-view" class="row">
+        <button id="order-edit">Editar ordem</button>
+      </div>
+      <div id="order-editing" hidden>
+        <div id="order-add-row" class="row">
+          <select id="order-add" aria-label="Equipe para adicionar"></select>
+          <button id="order-add-btn">Adicionar</button>
+        </div>
+        <div class="row">
+          <button id="order-save" class="primary">Salvar ordem</button>
+          <button id="order-shuffle" title="Sorteia a ordem desta lista; só vale depois de salvar">Sortear ordem</button>
+          <button id="order-cancel">Cancelar</button>
+          <span id="order-dirty" class="warn"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="teams">
+      <h2>Equipes</h2>
+      <form id="team-add" class="row">
+        <input id="new-name" placeholder="Nome da equipe" aria-label="Nome da equipe" required>
+        <label class="file"><input id="new-logo" type="file" accept=".png,.jpg,.jpeg,.webp,.svg"><span class="file-btn">Escolher logo</span><span class="file-name">nenhum arquivo</span></label>
+        <label class="check"><input id="new-hw" type="checkbox"> open-hardware por padrão</label>
+        <button class="primary">Adicionar equipe</button>
+      </form>
+      <ul id="teams-list" class="plain"></ul>
+    </section>
+  </div>
+</details>
 <script src="/static/controle.js"></script>
 </body>
 </html>
