@@ -34,6 +34,14 @@
   var ophase = null, ophaseTouched = false;      // fase do painel de ordem (segue a ativa)
   var orderEditing = false;                      // lista de ordem só vira editável em "Editar ordem"
   var LOW_MS = 300000;                           // últimos 5 min: mesmo limiar da TV (tv.js)
+  var SLOT_MS = 1800000;                         // 30:00, igual a constants.SLOT_MS
+  var wasExpired = null;                         // para avisar uma vez quando o tempo acaba
+  function icon(d) {
+    return '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + d +
+      '" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  var ICON = { up: icon("M3 9l4-4 4 4"), down: icon("M3 5l4 4 4-4"), x: icon("M3.5 3.5l7 7M10.5 3.5l-7 7"),
+               minus: icon("M3 7h8"), plus: icon("M3 7h8M7 3v8") };
   var toastTimer = null;
 
   function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
@@ -106,7 +114,7 @@
     }
     return fetch(url, opts).then(function (r) {
       return r.json().then(function (j) {
-        if (!r.ok) { var e = new Error("api"); e.errors = j.errors || ["Erro " + r.status]; throw e; }
+        if (!r.ok) { var e = new Error("api"); e.errors = j.errors || ["Erro " + r.status]; e.fields = j.fields; throw e; }
         return j;
       }, function () { var e = new Error("api"); e.errors = ["Erro " + r.status]; throw e; });
     });
@@ -144,24 +152,52 @@
     var t = state.timer;
     return t.running ? Math.max(0, t.remaining_ms - (Date.now() - receivedAt)) : t.remaining_ms;
   }
+  // Pronto / Em voo / Pausado / Tempo esgotado: o mesmo texto que a TV mostra.
+  function timerState(ms) {
+    if (!state.current) return "";
+    if (ms === 0) return "Tempo esgotado";
+    if (state.timer.running) return ms < LOW_MS ? "Em voo · últimos 5 min" : "Em voo";
+    return ms >= SLOT_MS ? "Pronto para iniciar" : "Pausado";
+  }
+  var lastSpoken = "";
   function renderCountdown() {
     if (!state) return;
     var ms = remainingMs(), c = $("countdown");
     c.textContent = fmt(ms);
     c.classList.toggle("low", ms < LOW_MS);
+    var st = timerState(ms), chip = $("timer-state");
+    if (chip.textContent !== st) {
+      chip.textContent = st;
+      chip.className = "t-state" + (ms === 0 ? " up" : (state.timer.running ? " run" : ""));
+      $("arena").classList.toggle("expired", ms === 0 && !!state.current);
+    }
+    var spoken = fmt(ms).slice(0, 5) + " restantes";     // leitor de tela: segundos, não ms
+    if (spoken !== lastSpoken) { lastSpoken = spoken; c.setAttribute("aria-label", spoken); }
   }
 
   function renderArena() {
     var sel = $("phase-select");
     if (document.activeElement !== sel) sel.value = String(state.phase);
     $("phase-name").textContent = state.phase_name;
+    var noOrder = !state.current && !state.phase_finished;
     $("arena-name").textContent = state.current ? state.current.name :
-      (state.phase_finished ? "Fase encerrada" : "—");
-    $("next-name").textContent = state.next ? state.next.name : "—";
-    $("b-start").disabled = state.timer.running || !state.current;
-    $("b-pause").disabled = !state.timer.running;
+      (state.phase_finished ? "Fase encerrada" : "Sem ordem de voo");
+    $("next-name").textContent = state.next ? state.next.name : (state.current ? "última equipe da fase" : "—");
+    $("next-line").hidden = noOrder;
+    $("open-prep").hidden = !noOrder;
+    $("arena").classList.toggle("noteam", !state.current);
+    var t = state.timer, expired = !!t.expired;
+    var paused = !t.running && !expired && t.remaining_ms < SLOT_MS;
+    $("b-start").textContent = paused ? "Retomar" : "Iniciar";
+    $("b-start").disabled = t.running || expired || !state.current;
+    $("b-pause").disabled = !t.running;
+    $("b-plus").disabled = !state.current;
     $("b-reset").disabled = !state.current;
     $("b-next").disabled = !state.current;
+    $("b-next").className = expired ? "primary" : "go";   // em 00:00 o próximo passo é chamar a próxima
+    if (wasExpired === false && expired && state.current)
+      toast("Tempo esgotado: " + state.current.name + ". Registre a última tentativa e chame a próxima equipe.");
+    wasExpired = expired;
     renderCountdown();
   }
 
@@ -218,12 +254,12 @@
     $("cancel-edit").hidden = !editingId;
     $("save-attempt").textContent = editingId ? "Salvar alterações" : "Salvar tentativa";
     var full = !editingId && team && thisAttempts(tid, phase).length >= 3;
-    $("save-attempt").disabled = !tid || full;
+    $("save-attempt").disabled = !tid || full || formInvalid;
     $("save-note").textContent = full ? team.name + " já tem 3 tentativas na Fase " + phase +
       ". Para corrigir, use Editar em uma delas." : "";
     $("team-select").disabled = !!editingId;
     if (key === formKey) return;
-    formKey = key;
+    formKey = key; formInvalid = false;
     buildFields(phase, editingId ? editingInputs() : null, team);
     preview();
   }
@@ -240,17 +276,27 @@
       var kind = f[0], key = f[1], row = el("div", { className: "field" });
       var inp;
       if (kind === "int") {
-        inp = el("input", { type: "number", step: 1, min: 0, id: "f-" + key });
+        inp = el("input", { type: "number", step: 1, min: 0, id: "f-" + key, inputMode: "numeric" });
         if (f[3] !== null) inp.max = f[3];
         inp.value = values ? values[key] : 0;
+        var bump = function (input, d) { return function () {
+          var v = parseInt(input.value, 10); v = isNaN(v) ? 0 : v + d;
+          if (v < 0) v = 0;
+          if (input.max !== "" && v > +input.max) v = +input.max;
+          input.value = v;
+          input.dispatchEvent(new Event("input"));
+        }; };
+        var minus = el("button", { type: "button", className: "stp", tabIndex: -1, ariaLabel: "menos 1: " + f[2], innerHTML: ICON.minus });
+        var plus = el("button", { type: "button", className: "stp", tabIndex: -1, ariaLabel: "mais 1: " + f[2], innerHTML: ICON.plus });
+        minus.onclick = bump(inp, -1); plus.onclick = bump(inp, 1);
         row.appendChild(el("label", { htmlFor: inp.id, textContent: f[2] }));
-        row.appendChild(inp);
+        row.appendChild(el("div", { className: "stepper" }, [minus, inp, plus]));
         row.appendChild(el("span", { className: "hint", textContent: f[4] + (f[3] !== null ? " (máx. " + f[3] + ")" : "") }));
       } else {
+        row.className = "field bool";
         inp = el("input", { type: "checkbox", id: "f-" + key });
         inp.checked = values ? !!values[key] : (key === "open_hw" && team ? !!team.open_hw_default : false);
-        row.appendChild(inp);
-        row.appendChild(el("label", { htmlFor: inp.id, textContent: f[2] }));
+        row.appendChild(el("label", { className: "check" }, [inp, el("span", { textContent: f[2] })]));
         row.appendChild(el("span", { className: "hint", textContent: f[3] }));
       }
       inp.dataset.kind = kind; inp.dataset.key = key;
@@ -280,7 +326,7 @@
       base = [40 * n(i.lifted), 20 * n(i.delivered), -5 * n(i.dropped)];
       doubled = i.returned && n(i.delivered) >= 1;
     } else if (phase === 3) {
-      if (!i.recognized) return "Operador não reconhecido";
+      if (!i.recognized) return null;
       base = [20 * n(i.bases), -5 * n(i.repeats), -10 * n(i.cross_repeats)];
       doubled = i.returned && n(i.bases) >= 1;
     } else {
@@ -299,18 +345,31 @@
     return txt + mult;
   }
 
+  var formInvalid = false;
+  function markInvalid(fields) {
+    document.querySelectorAll("#fields input").forEach(function (i) {
+      var bad = fields.indexOf(i.dataset.key) >= 0;
+      i.setAttribute("aria-invalid", bad ? "true" : "false");
+      i.closest(".field").classList.toggle("bad", bad);
+    });
+  }
   function preview() {
     var seq = ++previewSeq, phase = currentPhase(), inputs = readInputs();
     var f = $("formula"), err = $("form-errors");
     api("POST", "/api/preview", { phase: phase, inputs: inputs }).then(function (r) {
       if (seq !== previewSeq) return;
-      err.textContent = "";
-      f.textContent = "Pontos: " + formulaText(phase, inputs) + " = ";
+      err.textContent = ""; markInvalid([]); formInvalid = false;
+      var calc = formulaText(phase, inputs);
+      f.textContent = "Pontos: " + (calc === null ? "" : calc + " = ");
       f.appendChild(el("b", { textContent: String(r.points) }));
+      if (calc === null) f.appendChild(el("span", { textContent: "operador não reconhecido" }));
+      renderForm();
     }, function (e) {
       if (seq !== previewSeq) return;
       f.textContent = "Pontos: —";
       err.textContent = e.errors ? e.errors.join(" ") : "Sem conexão com o servidor.";
+      markInvalid(e.fields || []); formInvalid = !!e.fields;
+      renderForm();
     });
   }
 
@@ -333,7 +392,7 @@
       var pts = el("span", { className: "att-pts" }, [String(a.points) + " "]);
       if (k === best) pts.appendChild(el("span", { className: "star", textContent: "melhor" }));
       li.appendChild(pts);
-      li.appendChild(el("span", { className: "att-calc", textContent: formulaText(a.phase, a.inputs) }));
+      li.appendChild(el("span", { className: "att-calc", textContent: formulaText(a.phase, a.inputs) || "operador não reconhecido" }));
       var ed = el("button", { textContent: "Editar" });
       ed.onclick = (function (id) { return function () { startEdit(id); }; })(a.id);
       var del = el("button", { textContent: "Excluir", className: "danger" });
@@ -374,7 +433,10 @@
     $("order-edit").textContent = orderDraft.length ? "Editar ordem" : "Montar ordem";
     $("order-empty").hidden = orderDraft.length > 0;
     $("order-save").disabled = !orderDirty;
-    var key = JSON.stringify([phase, orderDraft, orderDirty, orderEditing, state.teams.map(function (t) { return [t.id, t.name]; })]);
+    // na fase ativa, a lista mostra o andamento: quem já voou, quem está na arena, quem vem a seguir
+    var live = phase === state.phase && !orderEditing && !orderDirty;
+    var slot = live ? state.slot_index : -1, hasCur = !!state.current;
+    var key = JSON.stringify([phase, orderDraft, orderDirty, orderEditing, slot, hasCur, state.teams.map(function (t) { return [t.id, t.name]; })]);
     $("order-dirty").textContent = orderDirty ? "alterações não salvas" : "";
     if (sig.order === key) return;
     sig.order = key;
@@ -383,13 +445,17 @@
     orderDraft.forEach(function (id, idx) {
       var li = el("li");
       li.appendChild(el("span", { className: "n", textContent: teamById(id).name }));
+      if (slot >= 0) {
+        var tag = idx < slot ? ["done", "voou"] : idx === slot && hasCur ? ["cur", "na arena"] :
+          idx === slot + 1 && hasCur ? ["nxt", "a seguir"] : null;
+        if (tag) { li.className = tag[0]; li.appendChild(el("span", { className: "o-tag", textContent: tag[1] })); }
+      }
       ol.appendChild(li);
       if (!orderEditing) return;
       var nm = teamById(id).name;
-      var up = el("button", { textContent: "↑", title: "subir", ariaLabel: "subir " + nm, disabled: idx === 0 });
-      var dn = el("button", { textContent: "↓", title: "descer", ariaLabel: "descer " + nm, disabled: idx === orderDraft.length - 1 });
-      var rm = el("button", { title: "remover da ordem", ariaLabel: "remover " + nm + " da ordem",
-        innerHTML: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' });
+      var up = el("button", { innerHTML: ICON.up, title: "subir", ariaLabel: "subir " + nm, disabled: idx === 0 });
+      var dn = el("button", { innerHTML: ICON.down, title: "descer", ariaLabel: "descer " + nm, disabled: idx === orderDraft.length - 1 });
+      var rm = el("button", { className: "rm", title: "remover da ordem", ariaLabel: "remover " + nm + " da ordem", innerHTML: ICON.x });
       up.onclick = function () { moveOrder(idx, -1); };
       dn.onclick = function () { moveOrder(idx, 1); };
       rm.onclick = function () { orderDraft.splice(idx, 1); orderDirty = true; sig.order = null; renderOrder(); };
@@ -464,12 +530,27 @@
       };
       del.onclick = function () {
         del.blur();
-        if (!confirm("Excluir a equipe \"" + t.name + "\" e suas tentativas?")) return;
-        quiet(act(api("DELETE", "/api/teams/" + t.id)));
+        var atts = state.attempts.filter(function (a) { return a.team_id === t.id; });
+        var lost = "";
+        if (atts.length) {
+          var by = {};
+          atts.forEach(function (a) { by[a.phase] = Math.max(by[a.phase] || 0, a.points); });
+          lost = " e " + (atts.length === 1 ? "sua tentativa" : "suas " + atts.length + " tentativas") + " (" +
+            Object.keys(by).map(function (ph) { return "Fase " + ph + ": " + by[ph] + " pts"; }).join(", ") + ")";
+        }
+        if (!confirm("Excluir a equipe " + t.name + lost + "?")) return;
+        quiet(act(api("DELETE", "/api/teams/" + t.id)).then(function () {
+          ok("Equipe " + t.name + " excluída.", { label: "Desfazer", run: function () {
+            quiet(act(api("POST", "/api/teams/" + t.id + "/restore")).then(function () {
+              sig.teams = null; renderTeams();
+              ok("Equipe " + t.name + " restaurada" + (atts.length > 1 ? " com suas tentativas." : atts.length ? " com sua tentativa." : "."));
+            }));
+          } });
+        }));
       };
       hw.setAttribute("aria-label", "open-hardware por padrão: " + t.name);
       var hwl = el("label", { className: "check hw" }, [hw]);
-      [name, hwl, fileLbl, save, del].forEach(function (x) { li.appendChild(x); });
+      [name, hwl, fileLbl, save, el("span", { className: "gap" }), del].forEach(function (x) { li.appendChild(x); });
       ul.appendChild(li);
     });
   }
@@ -482,6 +563,11 @@
 
   // -- eventos ---------------------------------------------------------
   $("new-logo").onchange = function () { fileName(this); };
+  $("open-prep").onclick = function () {
+    $("prep").open = true;
+    $("prep").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("order-edit").focus({ preventScroll: true });
+  };
   // Preparação: aberta quando falta algo (sem equipes ou sem ordem na fase ativa); senão lembra a escolha.
   var prepPref = null;
   try { prepPref = localStorage.getItem("frl-prep-open"); } catch (e) {}
@@ -584,6 +670,27 @@
       ok("Equipe " + name + " adicionada.");
     }));
   };
+
+  // Atalhos: Espaço inicia/pausa e N chama a próxima equipe (fora de campos de texto);
+  // Ctrl+Enter salva a tentativa de qualquer lugar. As confirmações continuam valendo.
+  document.addEventListener("keydown", function (e) {
+    if (!state || e.altKey || e.metaKey) return;
+    if (e.ctrlKey && e.key === "Enter") {
+      if (!$("save-attempt").disabled) { e.preventDefault(); $("save-attempt").click(); }
+      return;
+    }
+    if (e.ctrlKey) return;
+    var t = e.target, tag = t && t.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON" || tag === "SUMMARY" ||
+        (t && t.isContentEditable)) return;
+    if (e.key === " ") {
+      var b = state.timer.running ? $("b-pause") : $("b-start");
+      e.preventDefault();
+      if (!b.disabled) b.click();
+    } else if (e.key === "n" || e.key === "N") {
+      if (!$("b-next").disabled) { e.preventDefault(); $("b-next").click(); }
+    }
+  });
 
   // -- polling ---------------------------------------------------------
   function poll() {

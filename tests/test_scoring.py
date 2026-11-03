@@ -30,3 +30,12 @@ def test_validate_rejects_out_of_range():
 
 def test_validate_accepts_valid():
     assert validate_attempt(1, dict(bases=6, repeats=3, returned=True, open_hw=False)) == []
+
+
+def test_problems_name_the_field_in_portuguese():
+    from frl.scoring import attempt_problems
+    probs = attempt_problems(1, dict(bases=7, repeats=-1, returned=False, open_hw=False))
+    assert probs == [("bases", "Bases visitadas: no máximo 6."),
+                     ("repeats", "Pousos repetidos: use um número inteiro, de 0 para cima.")]
+    probs = attempt_problems(2, dict(lifted=1, delivered=2, dropped=0, returned=False, open_hw=False))
+    assert probs[0][0] == "delivered"

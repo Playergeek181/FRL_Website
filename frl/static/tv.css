@@ -1,89 +1,91 @@
 /* TV 16:9. Everything in vh so it scales with the screen.
-   Column: top bar 9vh, the board (fills), the sponsor band (auto, ~12vh).
-   Board grid: 2.4vh outer padding, 1.6vh gap; columns 0.82fr / 1.18fr; the left
-   column stacks the arena (fills) over the queue (auto); standings span both rows. */
+   Column: top bar 9vh, the board (fills), the sponsor band (auto, ~11vh).
+   Board: two flat columns split by a 1px rule, no boxes. Left .82fr stacks the
+   arena (fills) over the queue (auto); the standings take the right 1.18fr. */
 body { overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
 
+/* Top bar */
 #top {
-  height: 9vh; padding: 0 2.4vh;
+  height: 9vh; padding: 0 3.2vh; flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: 3vh;
   border-bottom: 1px solid var(--rule);
 }
 .brand { display: flex; align-items: center; gap: 2.4vh; min-width: 0; }
 .brand .cbr { height: 5.4vh; width: auto; display: block; }
-.brand h1 { padding-left: 2.4vh; border-left: 1px solid var(--raised); }
-#top h1 { font-size: 2.6vh; }
+.brand h1 {
+  font-size: 2.6vh; font-weight: 600; letter-spacing: -.01em; white-space: nowrap;
+  padding-left: 2.4vh; border-left: 1px solid var(--raised); line-height: 4.4vh;
+}
 #phases { list-style: none; display: flex; align-items: baseline; gap: 3.2vh; font-size: 2.1vh; color: var(--faint); white-space: nowrap; }
 #phases li.active { color: var(--text); font-weight: 600; font-size: 3.2vh; letter-spacing: -.01em; }
 #phases li.active .pn { color: var(--muted); font-weight: 500; }
 
-#tv {
-  flex: 1; min-height: 0; padding: 2.4vh 2.4vh 1.6vh;
-  display: grid; gap: 1.6vh;
-  grid-template-columns: .82fr 1.18fr;
-  grid-template-rows: 1fr auto;
-  grid-template-areas: "arena standings" "queue standings";
-}
-.card { background: var(--surface); border-radius: 2vh; padding: 2.6vh 3vh; min-width: 0; min-height: 0; }
-.card-h { font-size: 2.2vh; font-weight: 500; color: var(--muted); display: flex; align-items: baseline; gap: 1.2vh; }
-.card-sub { font-size: 1.7vh; font-weight: 400; color: var(--faint); }
+/* Board */
+#tv { flex: 1; min-height: 0; display: grid; grid-template-columns: .82fr 1.18fr; }
+#left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--rule); }
+.sec-h { font-size: 2.1vh; font-weight: 500; color: var(--muted); display: flex; align-items: baseline; gap: 1.2vh; }
+.sec-sub { font-size: 1.8vh; font-weight: 400; color: var(--faint); }
 
 /* Arena: who is flying and how long they have left */
-#arena { grid-area: arena; display: flex; flex-direction: column; }
+#arena { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 3.4vh 3.6vh 3vh; }
 .arena-body { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
 .arena-team { display: flex; align-items: center; gap: 2.2vh; min-width: 0; }
-.arena-team .logo { width: 9vh; height: 9vh; font-size: 3.2vh; }
-.arena-name { font-size: 5vh; font-weight: 600; line-height: 1.1; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.arena-team .logo { width: 8.4vh; height: 8.4vh; font-size: 3vh; }
+.arena-name {
+  font-family: "Barlow Condensed", "Inter", sans-serif; font-weight: 700;
+  font-size: 7vh; line-height: 1; letter-spacing: -.005em; overflow-wrap: anywhere;
+}
 .countdown {
-  margin-top: 2.2vh; font-size: min(15.5vh, 9.4vw); font-weight: 600; line-height: .95; letter-spacing: -.04em;
+  margin-top: 1.6vh; font-family: "Barlow Condensed", "Inter", sans-serif; font-weight: 700;
+  font-size: min(24vh, 13vw); line-height: .9; letter-spacing: -.01em;
   color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.countdown .cd-ms { font-size: .34em; font-weight: 500; letter-spacing: -.01em; color: var(--faint); }
+.countdown .cd-ms { font-size: .32em; font-weight: 600; letter-spacing: 0; color: var(--faint); margin-left: .08em; }
 .countdown.low { color: var(--negative); }
-.slot { margin-top: 2.6vh; height: .9vh; border-radius: 1vh; background: var(--raised); overflow: hidden; }
-.slot i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.slot { margin-top: 2.2vh; height: .7vh; background: #222; overflow: hidden; }
+.slot i { display: block; height: 100%; background: var(--accent); }
 .slot.low i { background: var(--negative); }
 .slot-cap { margin-top: 1.2vh; display: flex; justify-content: space-between; font-size: 1.9vh; color: var(--faint); font-variant-numeric: tabular-nums; }
 .slot-cap b { color: var(--muted); font-weight: 500; }
 .slot.low + .slot-cap b { color: var(--negative); }
-.arena-msg { font-size: 5vh; font-weight: 600; letter-spacing: -.02em; }
-.arena-msg-sub { margin-top: 1.2vh; font-size: 2.2vh; color: var(--faint); }
+/* 00:00: the slot is over and the room should see it until the referee calls the next team. */
+.slot-cap.up b { font-size: 3.4vh; font-weight: 700; line-height: 1; }
+.arena-msg { font-family: "Barlow Condensed", "Inter", sans-serif; font-size: 7vh; font-weight: 700; line-height: 1; }
+.arena-msg-sub { margin-top: 1.4vh; font-size: 2.2vh; color: var(--faint); }
 
 /* Queue: the flight order after the current team */
-#queue { grid-area: queue; }
-#queue-list { list-style: none; margin-top: 1.4vh; }
-#queue-list li { display: flex; align-items: center; gap: 1.6vh; padding: .9vh 0; font-size: 2.6vh; color: var(--muted); min-width: 0; }
-#queue-list li .logo { width: 4.4vh; height: 4.4vh; font-size: 1.6vh; }
+#queue { padding: 2.8vh 3.6vh 3.2vh; border-top: 1px solid var(--rule); }
+#queue-list { list-style: none; margin-top: 1.2vh; }
+#queue-list li { display: flex; align-items: center; gap: 1.6vh; padding: .8vh 0; font-size: 2.5vh; color: var(--muted); min-width: 0; }
+#queue-list li .logo { width: 4.2vh; height: 4.2vh; font-size: 1.5vh; }
 #queue-list li .q-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#queue-list li .q-tag { font-size: 1.8vh; color: var(--faint); }
-#queue-list li.first { color: var(--text); font-size: 3.2vh; font-weight: 600; }
+#queue-list li.first { color: var(--text); font-size: 3.4vh; font-weight: 600; padding-bottom: 1.2vh; }
 #queue-list li.first .logo { width: 5.6vh; height: 5.6vh; font-size: 2vh; }
 #queue-list li.empty { color: var(--faint); }
 
 /* Standings */
-#standings { grid-area: standings; overflow: hidden; display: flex; flex-direction: column; }
-#rank { width: 100%; border-collapse: collapse; margin-top: 1.6vh; font-size: 3vh; font-variant-numeric: tabular-nums; }
-#rank th { font-size: 1.8vh; font-weight: 500; color: var(--faint); text-align: right; padding: 0 1.4vh 1vh; }
+#standings { overflow: hidden; display: flex; flex-direction: column; min-width: 0; padding: 3.4vh 3.6vh 2.4vh; }
+#rank { width: 100%; border-collapse: collapse; margin-top: 1.4vh; font-size: 3vh; }
+#rank th { font-size: 2vh; font-weight: 500; color: var(--faint); text-align: right; padding: 0 1.4vh 1vh; white-space: nowrap; }
 #rank th.active { color: var(--text); }
-#rank td { text-align: right; padding: .55em 1.4vh; border-top: 1px solid var(--rule); white-space: nowrap; }
-#rank .pos { text-align: right; width: 1%; color: var(--faint); padding-left: 0; }
+#rank td { text-align: right; padding: .5em 1.4vh; border-top: 1px solid var(--rule); white-space: nowrap; }
+#rank td.pos, #rank td.ph, #rank td.total { font-family: "Barlow Condensed", "Inter", sans-serif; font-variant-numeric: tabular-nums; font-size: 1.18em; line-height: 1; }
+#rank .pos { text-align: right; width: 1%; color: var(--faint); padding-left: .6vh; font-weight: 600; }
 #rank .lg { width: 1%; padding-right: 0; }
 #rank td.lg { line-height: 0; }
 #rank td.lg .logo { font-size: .45em; width: 2.78em; height: 2.78em; }
 #rank .name { text-align: left; max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; }
-#rank td.ph { color: var(--muted); }
-#rank td.nil { color: var(--faint); font-weight: 400; }
-#rank .total { font-weight: 600; padding-right: .4vh; }
+#rank td.ph { color: var(--muted); font-weight: 600; }
+#rank .total { font-weight: 700; padding-right: .6vh; }
+#rank td.nil { color: var(--faint); font-weight: 600; }
 #rank tr.lead td.total { color: var(--accent); }
 #rank tr.lead td.pos { color: var(--text); }
-#rank tr.flying td { background: #10283a; }
-#rank tr.flying td:first-child { border-radius: 1vh 0 0 1vh; }
-#rank tr.flying td:last-child { border-radius: 0 1vh 1vh 0; }
-#rank tr.flying td.name::after {
-  content: "na arena"; margin-left: 1.2vh; padding: .15em .6em; border-radius: 99vh;
-  font-size: .62em; font-weight: 600; color: #04131d; background: var(--accent); vertical-align: .18em;
-}
+/* The team in the arena: a tint across the row and a plain-text marker, no badge. */
+#rank tr.flying td { background: #08283a; border-top-color: transparent; }
 #rank tr.flying + tr td { border-top-color: transparent; }
+#rank tr.flying td.name::after { content: "na arena"; margin-left: 1.4vh; font-size: .6em; font-weight: 600; color: var(--accent); }
+
+.tie-note { margin-top: auto; padding-top: 1.2vh; font-size: 1.7vh; color: var(--faint); }
 
 #offline {
   position: fixed; top: 10.4vh; left: 50%; transform: translateX(-50%); z-index: 10;
@@ -92,8 +94,20 @@ body { overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
 }
 #offline[hidden] { display: none; }
 
-/* Organisers, supporters and sponsors: the official strip from the CBR site, kept on
-   white because several marks are dark and were drawn for a light ground. */
-/* Dimmed a step so the clock stays the brightest thing on screen. */
-#sponsors { margin: 0 2.4vh 2.4vh; padding: 1vh 2vh; background: #fff; border-radius: 2vh; flex: none; filter: brightness(.8); }
-#sponsors img { display: block; width: 100%; height: auto; max-height: 9vh; object-fit: contain; }
+/* Organisers, supporters and sponsors: each mark from the official files, set in the three
+   groups the CBR uses, run edge to edge like a stadium board. The ground is a light grey rather
+   than white so the band stays a step below the clock; logos multiply into it, so their own white
+   backgrounds disappear and their colours stay true. Logo heights are in em, balanced by visual
+   weight in tv.html; tv.js sets the font-size so the whole row fits the screen width. */
+#sponsors {
+  flex: none; display: flex; justify-content: space-between; gap: 1.3em;
+  padding: 1vh 3.2vh 1.4vh; background: #e4e4e4; font-size: 6vh;
+}
+.sp-group { flex: 1 1 auto; display: flex; flex-direction: column; gap: .14em; }
+.sp-group h2 {
+  font-size: max(.24em, 1.4vh); font-weight: 600; color: #3d3d3d; letter-spacing: .01em;
+  display: flex; align-items: center; gap: .6em; white-space: nowrap;
+}
+.sp-group h2::after { content: ""; flex: 1; height: 1px; background: #a8a8a8; }
+.sp-logos { height: 1em; display: flex; align-items: center; justify-content: space-between; gap: .42em; }
+.sp-logos img { display: block; width: auto; mix-blend-mode: multiply; }

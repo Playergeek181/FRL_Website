@@ -14,8 +14,13 @@ def remaining(slot: dict, now_ms: float) -> int:
     return max(0, min(int(slot["remaining_ms"]), int(slot["remaining_ms"] - elapsed)))
 
 
+def expired(slot: dict) -> bool:
+    """Tempo esgotado: parado em 00:00 até o operador chamar a próxima equipe."""
+    return not slot["running"] and int(slot["remaining_ms"]) <= 0
+
+
 def start(slot: dict, now_ms: float) -> dict:
-    if slot["running"]:
+    if slot["running"] or expired(slot):   # em 00:00 só +1 min, Reiniciar ou Próxima
         return dict(slot)
     return {**slot, "running": True, "started_at": now_ms}
 
@@ -40,6 +45,7 @@ def advance(slot: dict) -> dict:
 
 
 def tick(slot: dict, now_ms: float) -> dict:
+    """Ao chegar a 00:00 o cronômetro para e a equipe continua na arena (Tempo esgotado)."""
     if slot["running"] and remaining(slot, now_ms) == 0:
-        return advance(slot)
+        return {**slot, "running": False, "remaining_ms": 0, "started_at": None}
     return slot

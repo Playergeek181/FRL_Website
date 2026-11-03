@@ -19,34 +19,50 @@ def _is_int(v):
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-def validate_attempt(phase: int, inputs: dict) -> list[str]:
+# Nomes dos campos como aparecem na página de controle (mensagens de erro legíveis).
+LABELS = {
+    "bases": "Bases visitadas", "repeats": "Pousos repetidos",
+    "cross_repeats": "Pousos em base já usada pelo outro drone",
+    "lifted": "Kits levantados", "delivered": "Kits entregues", "dropped": "Kits derrubados",
+    "qr": "QR codes lidos", "returned": "Retornou e pousou na base de decolagem",
+    "open_hw": "Drone open-hardware", "recognized": "Operador reconhecido",
+    "maze": "Navegou pelo labirinto", "landed": "Pousou na base final",
+}
+
+
+def attempt_problems(phase: int, inputs: dict) -> list[tuple]:
+    """Lista de (campo, mensagem); campo é None quando o erro não é de um campo só."""
     if phase not in _INTS:
-        return ["Fase inválida."]
-    errors = []
+        return [(None, "Fase inválida.")]
+    out = []
     for key in _BOOLS[phase]:
         if key not in inputs:
-            errors.append(f"Campo obrigatório ausente: {key}.")
+            out.append((key, f"{LABELS[key]}: campo ausente."))
         elif not isinstance(inputs[key], bool):
-            errors.append(f"Campo '{key}' deve ser verdadeiro ou falso.")
+            out.append((key, f"{LABELS[key]}: marque ou desmarque."))
     ints_ok = True
     for key, maximum in _INTS[phase].items():
         if key not in inputs:
-            errors.append(f"Campo obrigatório ausente: {key}.")
+            out.append((key, f"{LABELS[key]}: campo ausente."))
             ints_ok = False
             continue
         v = inputs[key]
         if not _is_int(v) or v < 0:
-            errors.append(f"Campo '{key}' deve ser um inteiro maior ou igual a 0.")
+            out.append((key, f"{LABELS[key]}: use um número inteiro, de 0 para cima."))
             ints_ok = False
         elif maximum is not None and v > maximum:
-            errors.append(f"Campo '{key}' não pode ser maior que {maximum}.")
+            out.append((key, f"{LABELS[key]}: no máximo {maximum}."))
             ints_ok = False
     if phase == 2 and ints_ok:
         if inputs["delivered"] > inputs["lifted"]:
-            errors.append("Pacotes entregues não podem exceder os levantados.")
+            out.append(("delivered", "Kits entregues não podem passar dos kits levantados."))
         elif inputs["dropped"] > inputs["lifted"] - inputs["delivered"]:
-            errors.append("Pacotes derrubados não podem exceder os levantados e não entregues.")
-    return errors
+            out.append(("dropped", "Kits derrubados não podem passar dos levantados e não entregues."))
+    return out
+
+
+def validate_attempt(phase: int, inputs: dict) -> list[str]:
+    return [m for _, m in attempt_problems(phase, inputs)]
 
 
 def attempt_points(phase: int, inputs: dict) -> int:

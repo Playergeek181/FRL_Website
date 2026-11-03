@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FRL 2026 - Controle</title>
 <link rel="preload" href="/static/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/barlow-condensed-latin-700.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/common.css">
 <link rel="stylesheet" href="/static/controle.css">
 </head>
@@ -12,18 +13,11 @@
 <div id="offline" hidden>Sem conexão com o servidor</div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <header id="top">
-  <h1 class="mark">
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-      <circle cx="5" cy="5" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
-      <circle cx="19" cy="5" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
-      <circle cx="5" cy="19" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
-      <circle cx="19" cy="19" r="3.2" fill="none" stroke="var(--accent)" stroke-width="2"/>
-      <path d="M7.5 7.5l9 9M16.5 7.5l-9 9" stroke="var(--accent)" stroke-width="2"/>
-      <rect x="9.5" y="9.5" width="5" height="5" rx="1" fill="var(--accent)"/>
-    </svg>
-    Placar FRL 2026 <span class="sub">Controle</span>
-  </h1>
-  <a class="btn" href="/tv" target="_blank" rel="noopener">Abrir tela da TV</a>
+  <div class="brand">
+    <img class="cbr" src="/static/brand/cbr.png" alt="Competição Brasileira de Robótica">
+    <h1>Placar FRL 2026 <span class="sub">Controle</span></h1>
+  </div>
+  <a class="btn ghost" href="/tv" target="_blank" rel="noopener"><span>Abrir <span class="wide">tela da </span>TV</span></a>
 </header>
 
 <section id="arena" class="panel" aria-label="Arena">
@@ -42,19 +36,24 @@
   <div class="a-team">
     <span class="lbl">Na arena</span>
     <b id="arena-name">—</b>
-    <span class="next muted">A seguir: <span id="next-name">—</span></span>
+    <span class="next muted" id="next-line">A seguir: <span id="next-name">—</span></span>
+    <button id="open-prep" class="link" hidden>Montar a ordem em Preparação</button>
   </div>
-  <span id="countdown">30:00.000</span>
+  <div class="a-clock">
+    <span id="countdown" role="timer" aria-live="off">30:00.000</span>
+    <span id="timer-state" class="t-state"></span>
+  </div>
   <div class="a-ctl">
     <div class="a-grp" role="group" aria-label="Cronômetro">
       <button id="b-start" class="primary" data-timer="start">Iniciar</button>
       <button id="b-pause" data-timer="pause">Pausar</button>
       <button id="b-plus" data-timer="add">+1 min</button>
-    </div>
-    <div class="a-grp" role="group" aria-label="Encerrar ou reiniciar">
       <button id="b-reset" class="outline" data-timer="reset">Reiniciar</button>
-      <button id="b-next" class="outline" data-timer="next">Próxima equipe</button>
     </div>
+    <div class="a-grp" role="group" aria-label="Encerrar a equipe">
+      <button id="b-next" class="go" data-timer="next">Próxima equipe</button>
+    </div>
+    <p class="keys">Atalhos: <kbd>Espaço</kbd> iniciar/pausar · <kbd>N</kbd> próxima equipe · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> salvar tentativa</p>
   </div>
 </section>
 
@@ -75,7 +74,7 @@
     <span id="att-phase-note" class="warn"></span>
     <div id="fields"></div>
     <div id="formula" class="formula"></div>
-    <div id="form-errors" class="errors"></div>
+    <div id="form-errors" class="errors" aria-live="polite"></div>
     <div class="row">
       <button id="save-attempt" class="primary">Salvar tentativa</button>
       <button id="cancel-edit" hidden>Cancelar edição</button>

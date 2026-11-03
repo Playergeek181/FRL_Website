@@ -1,32 +1,129 @@
-# Placar FRL 2026
+# Placar FRL 2026 · FRL 2026 Scoreboard
 
-Placar para a Flying Robots League (RoboCup/CBR 2026). Servidor Flask com tela de TV (`/tv`) e tela do operador (`/controle`). Funciona offline.
+[Português](#português) · [English](#english)
 
-## Rodar localmente
+Placar da Flying Robots League (RoboCup Brasil / CBR 2026): uma tela para a TV do público e uma página de controle para o operador. Funciona sem internet.
+
+Scoreboard for the Flying Robots League (RoboCup Brasil / CBR 2026): a screen for the audience TV and a control page for the operator. Works without internet.
+
+---
+
+## Português
+
+### O que é
+
+Um pequeno servidor (Python + Flask) que serve duas páginas:
+
+| Página | Endereço | Para quem |
+|---|---|---|
+| **TV** | `http://localhost:8000/tv` | Telão/TV do público. Só mostra; não tem botões. |
+| **Controle** | `http://localhost:8000/controle` | O operador/árbitro: cronômetro, pontuação, ordem de voo e equipes. |
+
+Tudo o que o operador faz aparece na TV em menos de um segundo. Os dados ficam salvos no computador (pasta `data/`), então nada se perde se o computador desligar.
+
+### Rodar no seu computador (localhost)
+
+**Você precisa de:** Python 3.10 ou mais novo ([python.org](https://www.python.org/downloads/); no Windows, marque "Add Python to PATH" ao instalar) e Git (ou baixe o projeto como ZIP pelo GitHub: botão **Code → Download ZIP**).
+
+**1. Baixe o projeto**
+
+```bash
+git clone https://github.com/Playergeek181/FRL_Website.git
+cd FRL_Website
+```
+
+**2. Instale (só na primeira vez, precisa de internet)**
+
+Linux / macOS:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+```
+
+Windows (PowerShell ou Prompt de Comando):
+
+```bat
+py -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
+**3. Inicie o placar**
+
+Linux / macOS:
+
+```bash
 .venv/bin/python -m frl
 ```
 
-O servidor escuta em `0.0.0.0:8000`:
+Windows:
+
+```bat
+.venv\Scripts\python -m frl
+```
+
+**4. Abra no navegador**
 
 - TV: <http://localhost:8000/tv>
-- Operador: <http://localhost:8000/controle>
+- Controle: <http://localhost:8000/controle>
 
-Os dados ficam em `data/` (`state.json` e `logos/`). Para usar outra pasta, defina `FRL_DATA_DIR`.
+Deixe a janela do terminal aberta enquanto usa o placar. Para parar, aperte `Ctrl+C` nela.
 
-## Raspberry Pi (Raspberry Pi OS Bookworm)
+**Usar em outro aparelho da mesma rede (celular, notebook, TV):** descubra o IP do computador (`hostname -I` no Linux, `ipconfig getifaddr en0` no macOS, `ipconfig` no Windows) e abra `http://<ip>:8000/tv` ou `http://<ip>:8000/controle`. Se não abrir, libere a porta 8000 no firewall do computador.
 
-1. Copie a pasta do projeto para o Pi (ex.: `/home/pi/FRL_Website`) e rode os mesmos comandos de venv acima (`python3 -m venv .venv` e `pip install -r requirements.txt`). **Faça isso antes de ir para o local da competição:** a instalação baixa pacotes e precisa de internet; depois disso o placar funciona totalmente offline.
-2. Descubra o IP do Pi com `hostname -I`.
-3. O operador abre, em outro dispositivo na mesma rede: `http://<ip>:8000/controle`.
-4. **Acerte o relógio do Pi antes do evento.** O cronômetro usa o relógio do sistema; o Raspberry Pi não tem relógio próprio e, sem internet, pode iniciar com a hora errada e ser corrigido no meio de uma rodada. Confira com `date` (ajuste com `sudo date -s "2026-11-05 09:00:00"` se necessário). Recomenda-se um módulo RTC com bateria (o Pi 5 tem conector para bateria do RTC).
+**Opções:** os dados ficam em `data/` (`state.json`, `logos/` e `backups/`). Para usar outra pasta, defina a variável `FRL_DATA_DIR` antes de iniciar (ex.: `FRL_DATA_DIR=/caminho/da/pasta .venv/bin/python -m frl`).
 
-### Iniciar o servidor no boot (systemd)
+### Como usar
 
-Crie `/etc/systemd/system/frl.service` (ajuste `User` e os caminhos para o seu usuário/pasta):
+#### Antes da competição: Preparação
+
+Na página de controle, abra **Preparação** (no fim da página).
+
+1. **Equipes:** digite o nome, escolha o logo (png, jpg, webp ou svg) e clique em **Adicionar equipe**. Depois dá para trocar o nome ou o logo. Os logos reais das equipes estão em `logos-equipes/`.
+2. **Ordem de voo:** escolha a fase, clique em **Editar ordem**, adicione as equipes (ou use **Sortear ordem**), ajuste com as setas e clique em **Salvar ordem**. Cada fase tem a sua ordem. Durante a fase, a lista mostra quem já voou, quem está na arena e quem vem a seguir.
+
+#### Durante a competição
+
+1. **Fase ativa** (no topo): escolha a fase que está acontecendo. A TV mostra essa fase.
+2. **Na arena:** a primeira equipe da ordem de voo entra automaticamente. Ao lado aparece quem vem a seguir.
+3. **Cronômetro (30:00 por equipe):**
+   - **Iniciar** / **Pausar** (depois de pausar, vira **Retomar**).
+   - **+1 min** dá um minuto extra.
+   - **Reiniciar** volta a 30:00.
+   - **Próxima equipe** chama a próxima da ordem (pede confirmação).
+   - Ao chegar a 00:00, o cronômetro **para** e a TV mostra "Tempo esgotado"; a equipe continua na arena até você apertar **Próxima equipe**.
+4. **Registrar tentativa:** escolha a fase e a equipe, preencha os campos (botões − e + ajudam no celular) e clique em **Salvar tentativa**. A fórmula e os pontos aparecem antes de salvar; um campo inválido fica vermelho e explica o problema.
+5. **Tentativas:** a lista ao lado mostra as tentativas salvas; dá para editar ou excluir.
+
+**Atalhos de teclado** (fora de campos de texto): `Espaço` inicia/pausa, `N` chama a próxima equipe, `Ctrl+Enter` salva a tentativa.
+
+**Excluir equipe** mostra quantas tentativas e pontos serão perdidos e oferece **Desfazer** por alguns segundos (só até o servidor ser reiniciado; depois, use um backup).
+
+#### Classificação
+
+Para cada fase vale a melhor tentativa da equipe. As equipes são ordenadas por fase e recebem pontos de ranking pela posição; a TV mostra esses pontos por fase (F1 a F4) e o total. Em caso de empate no total, vale o desempate do regulamento: mais fases pontuadas, depois mais pontos na Fase 1, 2, 3 e 4.
+
+### Backup e nova competição
+
+- **Backup manual:** copie a pasta `data/` (ex.: `cp -r data data-backup-$(date +%F)`).
+- O servidor mantém uma cópia do último estado bom em `data/state.json.bak`. Se `state.json` estiver corrompido, ele usa o `.bak`, guarda o arquivo ruim como `state.json.corrupt-<data>` e registra um aviso no log.
+- **Backup automático da pontuação:** toda vez que uma tentativa é salva, editada ou excluída, o servidor grava uma cópia completa em `data/backups/`, com data, fase, equipe e ação no nome (ex.: `2026-11-05_14-32-10_fase1_capybots_salva.json`). Antes de excluir uma equipe que tem pontos, também guarda `..._antes-de-excluir-equipe.json`. Esses arquivos nunca são apagados nem sobrescritos.
+- **Restaurar um backup:** pare o servidor, copie o arquivo escolhido por cima de `data/state.json` e inicie de novo:
+
+```bash
+cp data/state.json data/state.json.antes-de-restaurar
+cp data/backups/<arquivo-escolhido>.json data/state.json
+```
+
+- **Competição nova do zero:** com o servidor parado, renomeie a pasta (`mv data data-antigo-$(date +%F)`) e inicie de novo.
+
+### Raspberry Pi no evento (Raspberry Pi OS Bookworm)
+
+1. Copie o projeto para o Pi (ex.: `/home/pi/FRL_Website`) e rode os comandos de instalação do Linux acima. **Faça isso antes de ir para o local:** a instalação precisa de internet; depois o placar funciona totalmente offline.
+2. Descubra o IP do Pi com `hostname -I`. O operador abre `http://<ip>:8000/controle` em outro aparelho na mesma rede.
+3. **Acerte o relógio do Pi antes do evento.** O cronômetro usa o relógio do sistema, e o Pi sem internet pode iniciar com a hora errada. Confira com `date` (ajuste com `sudo date -s "2026-11-05 09:00:00"`). Recomenda-se um módulo RTC com bateria.
+
+**Iniciar no boot (systemd):** crie `/etc/systemd/system/frl.service` (ajuste `User` e os caminhos):
 
 ```ini
 [Unit]
@@ -44,7 +141,161 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
-Ative o serviço:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now frl.service
+systemctl status frl.service
+journalctl -u frl.service -f   # logs
+```
+
+Com o serviço, pare e inicie o placar com `sudo systemctl stop frl.service` e `sudo systemctl start frl.service` (por exemplo, para restaurar um backup).
+
+**TV em modo quiosque (Chromium):** o autostart espera o servidor responder antes de abrir o navegador. Troque `chromium-browser` por `chromium` se o primeiro não existir (`which chromium-browser chromium`).
+
+- **labwc** (imagens mais novas): em `~/.config/labwc/autostart` adicione a linha abaixo. Se esse arquivo existir, ele substitui o `/etc/xdg/labwc/autostart` do sistema; se faltar algo (painel, papel de parede), copie o do sistema e acrescente a linha.
+
+```
+sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-infobars http://localhost:8000/tv' &
+```
+
+- **Wayfire**: em `~/.config/wayfire.ini`:
+
+```ini
+[autostart]
+tv = sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-infobars http://localhost:8000/tv'
+```
+
+**Tela que não apaga:** `sudo raspi-config` → **Display Options → Screen Blanking → No**, e reinicie. Se ainda apagar: no labwc, não copie a linha `swayidle` para o seu autostart; no Wayfire, adicione `[idle]` com `screensaver_timeout = -1` e `dpms_timeout = -1`.
+
+**Ensaio geral:** ligue tudo do zero e confira que a TV abre o placar sozinha; no meio de um voo, **tire o Pi da tomada** e confira que, ao religar, a TV volta com o cronômetro correto sem nenhum clique; confira que a tela não apaga depois de alguns minutos parada.
+
+### Desenvolvimento
+
+```bash
+.venv/bin/pip install pytest
+.venv/bin/pytest
+```
+
+Código em `frl/` (servidor) e `frl/static/` (páginas). Logos oficiais e de patrocinadores em `logos-oficiais/`; logos das equipes em `logos-equipes/`.
+
+---
+
+## English
+
+### What it is
+
+A small server (Python + Flask) that serves two pages:
+
+| Page | Address | Who it's for |
+|---|---|---|
+| **TV** | `http://localhost:8000/tv` | The audience screen. Display only, no buttons. |
+| **Control** | `http://localhost:8000/controle` | The operator/referee: timer, scoring, flight order and teams. |
+
+Everything the operator does shows up on the TV in under a second. Data is saved on the computer (the `data/` folder), so nothing is lost if the computer turns off. The interface is in Portuguese; the button names below are given as they appear on screen.
+
+### Run it on your computer (localhost)
+
+**You need:** Python 3.10 or newer ([python.org](https://www.python.org/downloads/); on Windows, tick "Add Python to PATH" when installing) and Git (or download the project as a ZIP from GitHub: **Code → Download ZIP**).
+
+**1. Get the project**
+
+```bash
+git clone https://github.com/Playergeek181/FRL_Website.git
+cd FRL_Website
+```
+
+**2. Install (first time only, needs internet)**
+
+Linux / macOS:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Windows (PowerShell or Command Prompt):
+
+```bat
+py -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
+**3. Start the scoreboard**
+
+Linux / macOS:
+
+```bash
+.venv/bin/python -m frl
+```
+
+Windows:
+
+```bat
+.venv\Scripts\python -m frl
+```
+
+**4. Open it in a browser**
+
+- TV: <http://localhost:8000/tv>
+- Control: <http://localhost:8000/controle>
+
+Keep the terminal window open while you use the scoreboard. To stop it, press `Ctrl+C` in that window.
+
+**Using it from another device on the same network (phone, laptop, TV):** find the computer's IP address (`hostname -I` on Linux, `ipconfig getifaddr en0` on macOS, `ipconfig` on Windows) and open `http://<ip>:8000/tv` or `http://<ip>:8000/controle`. If it doesn't load, allow port 8000 through the computer's firewall.
+
+**Options:** data lives in `data/` (`state.json`, `logos/` and `backups/`). To use another folder, set `FRL_DATA_DIR` before starting (e.g. `FRL_DATA_DIR=/path/to/folder .venv/bin/python -m frl`).
+
+### How to use it
+
+#### Before the competition: Preparação (setup)
+
+On the control page, open **Preparação** at the bottom of the page.
+
+1. **Equipes (teams):** type the name, pick the logo (png, jpg, webp or svg) and click **Adicionar equipe**. You can change the name or logo later. The teams' real logos are in `logos-equipes/`.
+2. **Ordem de voo (flight order):** pick the phase, click **Editar ordem**, add the teams (or use **Sortear ordem** to shuffle), adjust with the arrows and click **Salvar ordem**. Each phase has its own order. During the phase, the list marks who has flown, who is in the arena and who is next.
+
+#### During the competition
+
+1. **Fase ativa (active phase)** at the top: pick the phase being run. The TV shows that phase.
+2. **Na arena (in the arena):** the first team in the flight order goes in automatically. Who's next is shown beside it.
+3. **Timer (30:00 per team):**
+   - **Iniciar** / **Pausar** start and pause (after a pause it reads **Retomar**, resume).
+   - **+1 min** adds a minute.
+   - **Reiniciar** resets to 30:00.
+   - **Próxima equipe** calls the next team in the order (asks to confirm).
+   - At 00:00 the timer **stops** and the TV shows "Tempo esgotado" (time's up); the team stays in the arena until you press **Próxima equipe**.
+4. **Registrar tentativa (record an attempt):** pick the phase and team, fill in the fields (the − and + buttons help on a phone) and click **Salvar tentativa**. The formula and points show before you save; an invalid field turns red and says what's wrong.
+5. **Tentativas (attempts):** the list beside it shows saved attempts; you can edit or delete them.
+
+**Keyboard shortcuts** (outside text fields): `Space` start/pause, `N` next team, `Ctrl+Enter` save the attempt.
+
+**Deleting a team** shows how many attempts and points will be lost and offers **Desfazer** (undo) for a few seconds (only until the server restarts; after that, use a backup).
+
+#### Standings
+
+In each phase, a team's best attempt counts. Teams are ranked per phase and get ranking points by position; the TV shows those points per phase (F1 to F4) and the total. Ties on the total are broken by the rulebook: more phases scored, then more points in Phase 1, 2, 3 and 4.
+
+### Backups and starting a new competition
+
+- **Manual backup:** copy the `data/` folder (e.g. `cp -r data data-backup-$(date +%F)`).
+- The server keeps a copy of the last good state in `data/state.json.bak`. If `state.json` is corrupted, it uses the `.bak`, keeps the bad file as `state.json.corrupt-<date>` and logs a warning.
+- **Automatic score backups:** every time an attempt is saved, edited or deleted, the server writes a full copy to `data/backups/`, named with the date, phase, team and action (e.g. `2026-11-05_14-32-10_fase1_capybots_salva.json`). Before deleting a team that has points, it also writes `..._antes-de-excluir-equipe.json`. These files are never deleted or overwritten.
+- **Restore a backup:** stop the server, copy the chosen file over `data/state.json` and start it again:
+
+```bash
+cp data/state.json data/state.json.antes-de-restaurar
+cp data/backups/<chosen-file>.json data/state.json
+```
+
+- **Fresh competition:** with the server stopped, rename the folder (`mv data data-old-$(date +%F)`) and start again.
+
+### Raspberry Pi at the event (Raspberry Pi OS Bookworm)
+
+1. Copy the project to the Pi (e.g. `/home/pi/FRL_Website`) and run the Linux install commands above. **Do this before going to the venue:** installing needs internet; after that the scoreboard runs fully offline.
+2. Find the Pi's IP with `hostname -I`. The operator opens `http://<ip>:8000/controle` on another device on the same network.
+3. **Set the Pi's clock before the event.** The timer uses the system clock, and a Pi without internet may boot with the wrong time. Check with `date` (set it with `sudo date -s "2026-11-05 09:00:00"`). A battery-backed RTC module is recommended.
+
+**Start on boot (systemd):** create `/etc/systemd/system/frl.service` with the same unit file shown in the Portuguese section above (adjust `User` and paths), then:
 
 ```bash
 sudo systemctl daemon-reload
@@ -53,61 +304,19 @@ systemctl status frl.service
 journalctl -u frl.service -f   # logs
 ```
 
-### Modo quiosque na TV (Chromium)
+With the service, stop and start the scoreboard with `sudo systemctl stop frl.service` and `sudo systemctl start frl.service` (for example, to restore a backup).
 
-O navegador é `chromium-browser`; em imagens mais novas o binário se chama `chromium`. **Troque por `chromium` se `chromium-browser` não existir** (teste com `which chromium-browser chromium`).
+**TV kiosk mode (Chromium):** use the same autostart line shown in the Portuguese section (labwc: `~/.config/labwc/autostart`; Wayfire: `[autostart]` in `~/.config/wayfire.ini`). It waits for the server to answer before opening the browser. Replace `chromium-browser` with `chromium` if the first doesn't exist. On labwc, a personal autostart file replaces the system one (`/etc/xdg/labwc/autostart`); copy the system file first if the panel or wallpaper goes missing.
 
-Para a TV nunca precisar de clique ou F5, o autostart espera o servidor responder antes de abrir o Chromium (senão, se o navegador subir primeiro, aparece uma página de erro).
+**Keep the screen on:** `sudo raspi-config` → **Display Options → Screen Blanking → No**, then reboot. If it still blanks: on labwc, don't copy the `swayidle` line into your autostart; on Wayfire, add `[idle]` with `screensaver_timeout = -1` and `dpms_timeout = -1`.
 
-**labwc** (padrão nas imagens mais novas): crie/edite `~/.config/labwc/autostart` e adicione:
+**Dress rehearsal:** power everything up from cold and check the TV opens the scoreboard by itself; mid-flight, **pull the Pi's plug** and check that, once it's back, the TV shows the correct timer without any clicks; check the screen doesn't blank after a few idle minutes.
 
-```
-sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-infobars http://localhost:8000/tv' &
-```
-
-Atenção: se `~/.config/labwc/autostart` existir, ele substitui o `/etc/xdg/labwc/autostart` do sistema. Se faltar algo (painel, papel de parede), copie o arquivo do sistema para lá e acrescente a linha acima.
-
-**Wayfire**: em `~/.config/wayfire.ini`, na seção `[autostart]`:
-
-```ini
-[autostart]
-tv = sh -c 'until curl -s localhost:8000/api/state >/dev/null; do sleep 1; done; chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-infobars http://localhost:8000/tv'
-```
-
-(Em ambos, troque `chromium-browser` por `chromium` se necessário. A opção `--disable-session-crashed-bubble` evita o balão "restaurar páginas" depois de uma queda de energia.)
-
-### Desativar o apagamento de tela
-
-Rode `sudo raspi-config` e vá em **Display Options → Screen Blanking → No** (desativar); reinicie o Pi.
-
-Se a tela ainda apagar (Wayland):
-
-- **labwc**: o apagamento vem de uma linha `swayidle` no autostart do sistema (`/etc/xdg/labwc/autostart`). Ao usar `~/.config/labwc/autostart` próprio, não copie essa linha (ou comente-a).
-- **Wayfire**: em `~/.config/wayfire.ini` adicione `[idle]` com `screensaver_timeout = -1` e `dpms_timeout = -1`.
-
-### Ensaio geral antes do evento
-
-Faça um ensaio completo no Pi e na TV reais, do jeito que serão usados:
-
-- Ligue tudo do zero (boot a frio) e confira que a TV abre o placar sozinha.
-- Cadastre equipes, inicie o cronômetro e, no meio de um slot, **tire o Pi da tomada**. Ao religar, a TV deve voltar ao placar com o cronômetro correto **sem nenhum clique**.
-- Confira que a tela não apaga depois de alguns minutos parada.
-
-## Backup e nova competição
-
-- **Backup:** copie a pasta `data/` (ex.: `cp -r data data-backup-$(date +%F)`).
-- O servidor mantém sozinho uma cópia do último estado bom em `data/state.json.bak`. Se `state.json` estiver corrompido, ele usa o `.bak`, guarda o arquivo ruim como `state.json.corrupt-<data>` e registra um aviso no log (`journalctl -u frl.service`).
-- **Competição nova do zero:**
-
-```bash
-sudo systemctl stop frl.service
-mv data data-antigo-$(date +%F)
-sudo systemctl start frl.service
-```
-
-## Desenvolvimento
+### Development
 
 ```bash
 .venv/bin/pip install pytest
 .venv/bin/pytest
 ```
+
+Server code in `frl/`, pages in `frl/static/`. Official and sponsor logos in `logos-oficiais/`; team logos in `logos-equipes/`.

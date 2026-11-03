@@ -191,3 +191,31 @@ def test_logo_url_changes_when_replaced_with_same_extension(client, tmp_path):
     assert url2 != url_old and url2.startswith(f"/logos/{tid}.png?v=")
     assert s["ranking"][0]["logo"] == url2
     assert client.get(url2).data == b"\x89PNG2"
+
+
+def test_preview_errors_name_fields(client):
+    r = client.post("/api/preview", json={"phase": 1,
+        "inputs": dict(bases=9, repeats=0, returned=False, open_hw=False)})
+    assert r.status_code == 400
+    assert r.get_json() == {"errors": ["Bases visitadas: no máximo 6."], "fields": ["bases"]}
+
+
+def test_team_delete_can_be_undone_with_logo(client, tmp_path):
+    tid = _logo_post(client, "/api/teams", "a.png").get_json()["teams"][0]["id"]
+    client.post("/api/attempts", json={"team_id": tid, "phase": 1,
+        "inputs": dict(bases=2, repeats=0, returned=False, open_hw=False)})
+    client.delete(f"/api/teams/{tid}")
+    s = client.post(f"/api/teams/{tid}/restore").get_json()
+    assert s["teams"][0]["id"] == tid and len(s["attempts"]) == 1
+    assert (tmp_path / "logos" / f"{tid}.png").exists()
+    assert client.post(f"/api/teams/{tid}/restore").status_code == 400
+
+
+def test_state_reports_time_up_and_slot_index(tmp_path):
+    from frl.app import create_app
+    app = create_app(tmp_path)
+    c = app.test_client()
+    a = c.post("/api/teams", data={"name": "A"}).get_json()["teams"][0]["id"]
+    c.post("/api/orders/1", json={"team_ids": [a]})
+    s = c.get("/api/state").get_json()
+    assert s["slot_index"] == 0 and s["timer"]["expired"] is False

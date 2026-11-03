@@ -7,7 +7,7 @@ from werkzeug.exceptions import BadRequest, HTTPException
 from . import timer
 from .constants import PHASE_NAMES
 from .ranking import overall_ranking
-from .scoring import attempt_points, validate_attempt
+from .scoring import attempt_points, attempt_problems
 from .store import Store
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -86,7 +86,9 @@ def create_app(data_dir: Path) -> Flask:
             "current": team_view(cur), "next": team_view(nxt),
             "phase_finished": bool(order) and cur is None,
             "timer": {"running": bool(slot["running"]),
-                      "remaining_ms": timer.remaining(slot, store.clock())},
+                      "remaining_ms": timer.remaining(slot, store.clock()),
+                      "expired": cur is not None and timer.expired(slot)},
+            "slot_index": slot["index"],
             "ranking": ranking,
             "teams": [{"id": t["id"], "name": t["name"], "logo": logo_url(t["logo"]),
                        "open_hw_default": t["open_hw_default"]} for t in s["teams"]],
@@ -165,11 +167,24 @@ def create_app(data_dir: Path) -> Flask:
             save_logo(team_id, f, ext)
         return state_json()
 
+    trash_dir = logo_dir / ".excluidos"   # logo da última equipe excluída, para "Desfazer"
+
     @app.delete("/api/teams/<team_id>")
     def remove_team(team_id):
         store.delete_team(team_id)
+        if trash_dir.exists():
+            for old in trash_dir.iterdir():
+                old.unlink()
         for old in logo_dir.glob(f"{team_id}.*"):
-            old.unlink()
+            trash_dir.mkdir(parents=True, exist_ok=True)
+            old.replace(trash_dir / old.name)
+        return state_json()
+
+    @app.post("/api/teams/<team_id>/restore")
+    def restore_team(team_id):
+        team = store.restore_team(team_id)
+        if team.get("logo") and (trash_dir / team["logo"]).exists():
+            (trash_dir / team["logo"]).replace(logo_dir / team["logo"])
         return state_json()
 
     # -- ordem / fase / cronômetro ------------------------------------
@@ -225,9 +240,10 @@ def create_app(data_dir: Path) -> Flask:
         phase, inputs = d.get("phase"), d.get("inputs")
         if phase not in (1, 2, 3, 4) or isinstance(phase, bool) or not isinstance(inputs, dict):
             raise ValueError(["Fase ou dados inválidos."])
-        errors = validate_attempt(phase, inputs)
-        if errors:
-            raise ValueError(errors)
+        problems = attempt_problems(phase, inputs)
+        if problems:   # "fields" diz quais campos marcar em vermelho no formulário
+            return jsonify(errors=[m for _, m in problems],
+                           fields=sorted({k for k, _ in problems if k})), 400
         return jsonify(points=attempt_points(phase, inputs))
 
     return app

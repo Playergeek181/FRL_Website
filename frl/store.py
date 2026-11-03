@@ -3,8 +3,11 @@ import json
 import os
 import shutil
 import sys
+import re
 import threading
 import time
+import unicodedata
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from uuid import uuid4
@@ -31,6 +34,8 @@ class Store:
         self._lock = threading.RLock()
         self.path = self.data_dir / "state.json"
         self.bak_path = self.data_dir / "state.json.bak"
+        self.backup_dir = self.data_dir / "backups"
+        self.last_deleted = None
         self.state = self._load()
 
     # -- persistência --------------------------------------------------
@@ -112,6 +117,35 @@ class Store:
         except OSError:
             pass
 
+    @staticmethod
+    def _slug(text: str) -> str:
+        ascii_ = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+        return re.sub(r"[^a-z0-9]+", "-", ascii_.lower()).strip("-") or "equipe"
+
+    def _backup(self, action: str, team_id: str, phase=None) -> None:
+        """Cópia completa do estado em data/backups/ após cada mudança de pontuação.
+
+        O arquivo é um state.json válido: para restaurar, copie-o por cima de
+        data/state.json com o servidor parado. Falha aqui nunca impede salvar a pontuação.
+        """
+        try:
+            team = next((t["name"] for t in self.state["teams"] if t["id"] == team_id), "equipe")
+            stamp = datetime.fromtimestamp(self.clock() / 1000).strftime("%Y-%m-%d_%H-%M-%S")
+            where = f"_fase{phase}" if phase else ""
+            base = f"{stamp}{where}_{self._slug(team)}_{action}"
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+            dest, n = self.backup_dir / f"{base}.json", 2
+            while dest.exists():
+                dest, n = self.backup_dir / f"{base}-{n}.json", n + 1
+            tmp = dest.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(json.dumps(self.state, ensure_ascii=False, indent=2))
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, dest)
+        except OSError as e:
+            self._warn(f"não foi possível gravar o backup da pontuação: {e}")
+
     def _team(self, team_id: str) -> dict:
         for t in self.state["teams"]:
             if t["id"] == team_id:
@@ -172,7 +206,18 @@ class Store:
     def delete_team(self, team_id) -> None:
         with self._lock:
             team = self._team(team_id)
+            if any(a["team_id"] == team_id for a in self.state["attempts"]):
+                self._backup("antes-de-excluir-equipe", team_id)   # guarda as pontuações que vão sumir
             current = self._current_team_id()
+            # o suficiente para "Desfazer" (só em memória; após reiniciar, use data/backups/)
+            self.last_deleted = {
+                "team": dict(team),
+                "team_index": self.state["teams"].index(team),
+                "orders": {k: o.index(team_id) for k, o in self.state["orders"].items()
+                           if team_id in o},
+                "attempts": [(i, dict(a)) for i, a in enumerate(self.state["attempts"])
+                             if a["team_id"] == team_id],
+            }
             self.state["teams"].remove(team)
             for k, order in self.state["orders"].items():
                 self.state["orders"][k] = [t for t in order if t != team_id]
@@ -180,6 +225,26 @@ class Store:
                                       if a["team_id"] != team_id]
             self._follow_team(current)
             self._save()
+
+    def restore_team(self, team_id) -> dict:
+        """Desfaz a última exclusão de equipe: volta a equipe, suas posições nas ordens e
+        suas tentativas, sem mudar quem está na arena."""
+        with self._lock:
+            snap = self.last_deleted
+            if not snap or snap["team"]["id"] != team_id:
+                raise ValueError(["Não há exclusão desta equipe para desfazer."])
+            current = self._current_team_id()
+            team = dict(snap["team"])
+            self.state["teams"].insert(min(snap["team_index"], len(self.state["teams"])), team)
+            for k, pos in snap["orders"].items():
+                order = self.state["orders"][k]
+                order.insert(min(pos, len(order)), team_id)
+            for i, a in snap["attempts"]:
+                self.state["attempts"].insert(min(i, len(self.state["attempts"])), a)
+            self.last_deleted = None
+            self._follow_team(current)
+            self._save()
+            return dict(team)
 
     # -- ordem / fase --------------------------------------------------
     def set_order(self, phase: int, team_ids: list) -> None:
@@ -203,13 +268,9 @@ class Store:
     def timer_action(self, action: str, now_ms=None) -> None:
         with self._lock:
             now = self.clock() if now_ms is None else now_ms
-            # aplica o avanço automático antes: pausar logo após 00:00 não prende a equipe
-            before = self.state["slot"]
-            slot = timer.tick(before, now)
-            expired = slot is not before
-            if action == "next" and expired:
-                pass  # o avanço automático já passou para a próxima equipe
-            elif action == "start":
+            # aplica o 00:00 antes: pausar logo após o fim grava "Tempo esgotado", não um resto
+            slot = timer.tick(self.state["slot"], now)
+            if action == "start":
                 slot = timer.start(slot, now)
             elif action == "pause":
                 slot = timer.pause(slot, now)
@@ -255,6 +316,7 @@ class Store:
                        "inputs": dict(inputs), "points": attempt_points(phase, inputs)}
             self.state["attempts"].append(attempt)
             self._save()
+            self._backup("salva", attempt["team_id"], attempt["phase"])
             return dict(attempt)
 
     def update_attempt(self, attempt_id, inputs: dict) -> dict:
@@ -266,12 +328,15 @@ class Store:
             attempt["inputs"] = dict(inputs)
             attempt["points"] = attempt_points(attempt["phase"], inputs)
             self._save()
+            self._backup("editada", attempt["team_id"], attempt["phase"])
             return dict(attempt)
 
     def delete_attempt(self, attempt_id) -> None:
         with self._lock:
-            self.state["attempts"].remove(self._attempt(attempt_id))
+            attempt = self._attempt(attempt_id)
+            self.state["attempts"].remove(attempt)
             self._save()
+            self._backup("excluida", attempt["team_id"], attempt["phase"])
 
     def best_by_phase(self) -> dict:
         with self._lock:

@@ -5,6 +5,9 @@
   font-weight: 100 900;
   font-display: block;
 }
+/* Barlow Condensed (SIL OFL 1.1): numerals and the arena team name on the TV. */
+@font-face { font-family: "Barlow Condensed"; src: url("/static/fonts/barlow-condensed-latin-600.woff2") format("woff2"); font-weight: 600; font-display: block; }
+@font-face { font-family: "Barlow Condensed"; src: url("/static/fonts/barlow-condensed-latin-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
 
 :root {
   --ground: #000;
@@ -16,11 +19,11 @@
   --muted: #b4b4b4;
   --faint: #949494;
   --dim: #5e5e5e;
-  /* the one data hue: sky, for a flying-robot league */
-  --accent: #4cb3f0;
+  /* the one data hue: the blue of the official CBR logo */
+  --accent: #00adee;
   --negative: #e5484d;
   --pill-negative-bg: #2c1a20; --pill-negative-ink: #f07a8e;
-  --pill-positive-bg: #10232f; --pill-positive-ink: #7cc8f5;
+  --pill-positive-bg: #0b2a38; --pill-positive-ink: #6fd0f7;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

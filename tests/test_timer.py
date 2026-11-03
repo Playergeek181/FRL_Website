@@ -13,9 +13,17 @@ def test_add_minute_while_running():
     assert t.remaining(s, 10_000) == 1_850_000
 
 
-def test_tick_auto_advances_and_waits():
+def test_tick_stops_at_zero_and_keeps_the_team():
     s = t.tick(t.start(t.new_slot(index=2), 0), 1_800_001)
-    assert s == {"index": 3, "running": False, "remaining_ms": 1_800_000, "started_at": None}
+    assert s == {"index": 2, "running": False, "remaining_ms": 0, "started_at": None}
+    assert t.expired(s)
+
+
+def test_start_does_nothing_once_expired_but_add_gives_time():
+    s = t.tick(t.start(t.new_slot(), 0), 1_800_001)
+    assert t.start(s, 2_000_000) == s
+    s = t.add(s, 60_000, 2_000_000)
+    assert not t.expired(s) and t.remaining(s, 2_000_000) == 60_000
 
 
 def test_reset_keeps_index():

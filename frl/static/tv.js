@@ -77,6 +77,9 @@
     var st = ms === 0 ? "Tempo esgotado" :
       (state.timer.running ? (low ? "Em voo · últimos 5 min" : "Em voo") : (ms >= total ? "Pronto para iniciar" : "Pausado"));
     $("slot-state").textContent = st;
+    $("slot-state").parentNode.classList.toggle("up", ms === 0);
+    var spoken = p[0] + " restantes";      // leitores de tela: segundos, não milissegundos
+    if (el.getAttribute("aria-label") !== spoken) el.setAttribute("aria-label", spoken);
     $("slot-total").textContent = "de " + fmtParts(total)[0];
   }
 
@@ -103,6 +106,7 @@
       body.appendChild(row);
       var c = make("div", "countdown");
       c.id = "countdown";
+      c.setAttribute("role", "timer");
       body.appendChild(c);
       var bar = make("div", "slot");
       bar.id = "slot";
@@ -130,15 +134,16 @@
     var start = s.next ? order.indexOf(s.next.id) : -1;
     var ids = start < 0 ? (s.next ? [s.next.id] : []) : order.slice(start, start + 3);
     ids = ids.filter(function (id) { return byId[id]; });
+    // sem equipe na arena, o painel da arena já diz "Aguardando ordem" / "Fase encerrada"
+    $("queue").hidden = !ids.length && !s.current;
     if (!ids.length) {
-      ol.appendChild(make("li", "empty", s.current ? "Esta é a última equipe da fase" : "Nenhuma equipe na sequência"));
+      ol.appendChild(make("li", "empty", "Esta é a última equipe da fase"));
       return;
     }
     ids.forEach(function (id, k) {
       var t = byId[id], li = make("li", k === 0 ? "first" : "");
       li.appendChild(logoEl(t, id));
       li.appendChild(make("span", "q-name", t.name));
-      if (k === 0) li.appendChild(make("span", "q-tag", "a seguir"));
       ol.appendChild(li);
     });
   }
@@ -169,14 +174,23 @@
       td(unranked ? "–" : r.total, "total" + (unranked ? " nil" : ""));
       tb.appendChild(tr);
     });
+    // mesmo total mas posições diferentes: o desempate das regras decidiu; diz qual é o critério
+    var posByTotal = {}, tie = false;
+    s.ranking.forEach(function (r) {
+      if (r.position === null || r.position === undefined) return;
+      var seen = posByTotal[r.total];
+      if (seen !== undefined && seen !== r.position) tie = true;
+      posByTotal[r.total] = r.position;
+    });
+    $("tie-note").hidden = !tie;
     fitRanking();
   }
 
   // Todas as linhas cabem no cartão: começa grande e diminui a fonte até caber.
   function fitRanking() {
     var table = $("rank"), card = $("standings");
-    var pad = parseFloat(getComputedStyle(card).paddingBottom) || 0;
-    var limit = card.getBoundingClientRect().bottom - pad;
+    var pad = parseFloat(getComputedStyle(card).paddingBottom) || 0, note = $("tie-note");
+    var limit = card.getBoundingClientRect().bottom - pad - (note.hidden ? 0 : note.offsetHeight);
     var fs = 3.5;
     table.style.fontSize = fs + "vh";
     while (fs > 1.3 && table.getBoundingClientRect().bottom > limit) {
@@ -184,7 +198,17 @@
       table.style.fontSize = fs.toFixed(2) + "vh";
     }
   }
-  window.addEventListener("resize", function () { if (state) fitRanking(); });
+  // Faixa de patrocinadores: a maior altura de logo em que a linha inteira cabe na largura.
+  function fitSponsors() {
+    var band = $("sponsors"), fs = 6.4;
+    band.style.fontSize = fs + "vh";
+    while (fs > 2 && band.scrollWidth > band.clientWidth + 1) {
+      fs -= 0.1;
+      band.style.fontSize = fs.toFixed(2) + "vh";
+    }
+  }
+  window.addEventListener("load", function () { fitSponsors(); if (state) fitRanking(); });
+  window.addEventListener("resize", function () { fitSponsors(); if (state) fitRanking(); });
 
   function render() {
     renderPhases(state);
