@@ -52,10 +52,23 @@
     var s = Math.floor(ms / 1000), m = Math.floor(s / 60);
     return [pad(m, 2) + ":" + pad(s % 60, 2), "." + pad(ms % 1000, 3)];
   }
+  // Sem dados novos por STALE_MS, o relógio para de contar sozinho: se o operador pausou
+  // enquanto a TV estava sem conexão, a sala não pode ver uma contagem que não é real.
+  var STALE_MS = 5000, failed = false;
+  function stale() { return state && Date.now() - receivedAt > STALE_MS; }
   function remaining() {
     var t = state.timer, ms = t.remaining_ms;
-    if (t.running) ms -= Date.now() - receivedAt;
+    if (t.running) ms -= Math.min(Date.now() - receivedAt, STALE_MS);
     return Math.max(0, ms);
+  }
+  var linkKey = "";
+  function renderLink() {                      // roda a cada quadro: só mexe no DOM quando muda
+    var off = !!stale(), key = off + "|" + failed;
+    if (key === linkKey) return;
+    linkKey = key;
+    document.body.classList.toggle("stale", off);
+    $("offline").textContent = off ? "Reconectando… o cronômetro está parado nesta tela" : "Sem conexão com o servidor";
+    $("offline").hidden = !(failed || off);
   }
 
   function renderCountdown() {
@@ -76,8 +89,13 @@
     bar.classList.toggle("low", low);
     var st = ms === 0 ? "Tempo esgotado" :
       (state.timer.running ? (low ? "Em voo · últimos 5 min" : "Em voo") : (ms >= total ? "Pronto para iniciar" : "Pausado"));
+    // pausado precisa ser visível do fundo da arena: dígitos apagados e a palavra em destaque
+    var paused = !state.timer.running && ms > 0 && ms < total;
+    el.classList.toggle("paused", paused);
+    bar.classList.toggle("paused", paused);
     $("slot-state").textContent = st;
     $("slot-state").parentNode.classList.toggle("up", ms === 0);
+    $("slot-state").parentNode.classList.toggle("paused", paused);
     var spoken = p[0] + " restantes";      // leitores de tela: segundos, não milissegundos
     if (el.getAttribute("aria-label") !== spoken) el.setAttribute("aria-label", spoken);
     $("slot-total").textContent = "de " + fmtParts(total)[0];
@@ -89,6 +107,7 @@
     for (var p = 1; p <= 4; p++) {
       var li = make("li", p === s.phase ? "active" : (p < s.phase ? "done" : ""));
       li.appendChild(document.createTextNode("Fase " + p));
+      if (p < s.phase) li.appendChild(make("span", "dn", " concluída"));   // em palavra, não só cor
       if (p === s.phase) li.appendChild(make("span", "pn", " · " + (s.phase_name || PHASES[p])));
       ol.appendChild(li);
     }
@@ -99,6 +118,8 @@
   function renderArena(s) {
     var body = $("arena-body");
     body.textContent = "";
+    // sem equipe na arena, o título diz em que fase estamos em vez de "Na arena" sobre o vazio
+    $("arena-h").textContent = s.current ? "Na arena" : "Fase " + s.phase + " · " + (s.phase_name || PHASES[s.phase]);
     if (s.current) {
       var row = make("div", "arena-team");
       row.appendChild(logoEl(s.current, s.current.id));
@@ -121,7 +142,13 @@
     } else {
       body.appendChild(make("div", "arena-msg", s.phase_finished ? "Fase encerrada" : "Aguardando ordem"));
       body.appendChild(make("div", "arena-msg-sub", s.phase_finished ?
-        "Todas as equipes da fase " + s.phase + " já voaram." : "A ordem de voo da fase " + s.phase + " ainda não foi definida."));
+        "Todas as equipes da Fase " + s.phase + " já voaram." : "A ordem de voo da Fase " + s.phase + " ainda não foi definida."));
+      if (s.phase_finished && PHASES[s.phase + 1]) {
+        var nx = make("div", "arena-next");
+        nx.appendChild(make("span", "lbl", "Próxima fase"));
+        nx.appendChild(make("b", "", "Fase " + (s.phase + 1) + " · " + PHASES[s.phase + 1]));
+        body.appendChild(nx);
+      }
     }
   }
 
@@ -169,7 +196,8 @@
       for (var p = 1; p <= 4; p++) {
         var v = r.phase_points[String(p)];
         var nil = v === null || v === undefined;
-        td(nil ? "–" : v, "ph" + (nil ? " nil" : ""));
+        // 0 de quem não tem posição fica apagado como o "–" do total: voou, mas não pontuou
+        td(nil ? "–" : v, "ph" + (nil || (unranked && v === 0) ? " nil" : "") + (p === s.phase ? " active" : ""));
       }
       td(unranked ? "–" : r.total, "total" + (unranked ? " nil" : ""));
       tb.appendChild(tr);
@@ -191,7 +219,7 @@
     var table = $("rank"), card = $("standings");
     var pad = parseFloat(getComputedStyle(card).paddingBottom) || 0, note = $("tie-note");
     var limit = card.getBoundingClientRect().bottom - pad - (note.hidden ? 0 : note.offsetHeight);
-    var fs = 3.5;
+    var fs = 4.4;
     table.style.fontSize = fs + "vh";
     while (fs > 1.3 && table.getBoundingClientRect().bottom > limit) {
       fs -= 0.1;
@@ -224,13 +252,14 @@
         var key = JSON.stringify([j.phase, j.phase_name, j.current, j.next, j.phase_finished, j.ranking, j.orders, j.teams]);
         state = j;
         receivedAt = Date.now();
-        $("offline").hidden = true;
+        failed = false;
+        renderLink();
         if (key !== lastKey) { lastKey = key; render(); } else renderCountdown();
       })
-      .catch(function () { $("offline").hidden = false; });
+      .catch(function () { failed = true; renderLink(); });
   }
 
   poll();
   setInterval(poll, 1000);
-  (function frame() { renderCountdown(); requestAnimationFrame(frame); })();
+  (function frame() { renderCountdown(); renderLink(); requestAnimationFrame(frame); })();
 })();

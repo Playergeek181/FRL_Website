@@ -204,6 +204,11 @@ def create_app(data_dir: Path) -> Flask:
         store.set_phase(phase)
         return state_json()
 
+    @app.post("/api/phase/undo")
+    def undo_phase():
+        store.undo_phase()
+        return state_json()
+
     @app.post("/api/timer/<action>")
     def timer_action(action):
         store.timer_action(action)
@@ -232,6 +237,11 @@ def create_app(data_dir: Path) -> Flask:
     @app.delete("/api/attempts/<attempt_id>")
     def remove_attempt(attempt_id):
         store.delete_attempt(attempt_id)
+        return state_json()
+
+    @app.post("/api/attempts/<attempt_id>/restore")
+    def restore_attempt(attempt_id):
+        store.restore_attempt(attempt_id)
         return state_json()
 
     @app.post("/api/preview")

@@ -112,7 +112,9 @@ def test_timer_actions_via_store(tmp_path):
     s.timer_action("add", now_ms=5)
     assert s.state["slot"]["remaining_ms"] == 1_860_000
     s.timer_action("reset")
-    assert s.state["slot"] == timer.new_slot(0)
+    slot = dict(s.state["slot"])
+    assert slot.pop("prev")["remaining_ms"] == 1_860_000   # guardado para "Desfazer"
+    assert slot == timer.new_slot(0)
     with pytest.raises(ValueError):
         s.timer_action("bogus")
 
@@ -362,3 +364,101 @@ def test_restore_only_the_last_deleted_team(tmp_path):
         s.restore_team(a["id"])
     s.restore_team(b["id"])
     assert [t["name"] for t in s.state["teams"]] == ["B"]
+
+
+UNDO_P1 = {"bases": 3, "repeats": 0, "returned": True, "open_hw": False}
+
+
+def test_next_can_be_undone_with_time_kept_and_paused(tmp_path):
+    now = [0]
+    s = Store(tmp_path, clock=lambda: now[0])
+    a, b = s.add_team("A"), s.add_team("B")
+    s.set_order(1, [a["id"], b["id"]])
+    s.timer_action("start")
+    now[0] = 600_000
+    s.timer_action("next")
+    assert s.current_and_next()[0]["id"] == b["id"]
+    now[0] = 605_000
+    s.timer_action("back")
+    slot = s.state["slot"]
+    assert s.current_and_next()[0]["id"] == a["id"]
+    assert not slot["running"] and timer.remaining(slot, now[0]) == 1_200_000
+    with pytest.raises(ValueError):   # só um passo para trás
+        s.timer_action("back")
+
+
+def test_back_without_next_is_refused(tmp_path):
+    s = Store(tmp_path, clock=lambda: 0)
+    a = s.add_team("A")
+    s.set_order(1, [a["id"]])
+    with pytest.raises(ValueError):
+        s.timer_action("back")
+
+
+def test_restored_attempt_keeps_its_place_and_id(tmp_path):
+    s = Store(tmp_path, clock=lambda: 0)
+    a = s.add_team("A")
+    t1 = s.add_attempt(a["id"], 1, UNDO_P1)
+    t2 = s.add_attempt(a["id"], 1, {**UNDO_P1, "bases": 5})
+    s.delete_attempt(t1["id"])
+    s.restore_attempt(t1["id"])
+    assert [x["id"] for x in s.state["attempts"]] == [t1["id"], t2["id"]]
+    with pytest.raises(ValueError):   # o mesmo desfazer não vale duas vezes
+        s.restore_attempt(t1["id"])
+
+
+def test_restore_attempt_respects_three_attempt_limit(tmp_path):
+    s = Store(tmp_path, clock=lambda: 0)
+    a = s.add_team("A")
+    t1 = s.add_attempt(a["id"], 1, UNDO_P1)
+    s.add_attempt(a["id"], 1, UNDO_P1)
+    s.delete_attempt(t1["id"])
+    s.add_attempt(a["id"], 1, UNDO_P1)
+    s.add_attempt(a["id"], 1, UNDO_P1)
+    with pytest.raises(ValueError):
+        s.restore_attempt(t1["id"])
+
+
+def test_minus_one_minute_never_goes_below_zero(tmp_path):
+    s = Store(tmp_path, clock=lambda: 0)
+    a = s.add_team("A")
+    s.set_order(1, [a["id"]])
+    s.timer_action("add")
+    s.timer_action("sub")
+    assert timer.remaining(s.state["slot"], 0) == 1_800_000
+    s.state["slot"]["remaining_ms"] = 20_000
+    s.timer_action("sub")
+    assert timer.remaining(s.state["slot"], 0) == 0
+
+
+def test_reset_can_be_undone(tmp_path):
+    now = [0]
+    s = Store(tmp_path, clock=lambda: now[0])
+    a = s.add_team("A")
+    s.set_order(1, [a["id"]])
+    s.timer_action("start")
+    now[0] = 300_000
+    s.timer_action("reset")
+    assert timer.remaining(s.state["slot"], now[0]) == 1_800_000
+    s.timer_action("back")
+    slot = s.state["slot"]
+    assert not slot["running"] and timer.remaining(slot, now[0]) == 1_500_000
+
+
+def test_phase_change_can_be_undone(tmp_path):
+    now = [0]
+    s = Store(tmp_path, clock=lambda: now[0])
+    a, b = s.add_team("A"), s.add_team("B")
+    s.set_order(1, [a["id"], b["id"]])
+    s.set_order(2, [b["id"], a["id"]])
+    s.timer_action("next")
+    s.timer_action("start")
+    now[0] = 60_000
+    s.set_phase(2)
+    assert s.state["active_phase"] == 2 and s.current_and_next()[0]["id"] == b["id"]
+    s.undo_phase()
+    slot = s.state["slot"]
+    assert s.state["active_phase"] == 1 and slot["index"] == 1
+    assert not slot["running"] and timer.remaining(slot, now[0]) == 1_740_000
+    with pytest.raises(ValueError):
+        s.undo_phase()

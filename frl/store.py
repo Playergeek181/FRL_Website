@@ -36,6 +36,8 @@ class Store:
         self.bak_path = self.data_dir / "state.json.bak"
         self.backup_dir = self.data_dir / "backups"
         self.last_deleted = None
+        self.last_deleted_attempt = None
+        self.last_phase = None
         self.state = self._load()
 
     # -- persistência --------------------------------------------------
@@ -260,8 +262,24 @@ class Store:
     def set_phase(self, phase: int) -> None:
         with self._lock:
             self._check_phase(phase)
+            if phase != self.state["active_phase"]:
+                # para "Desfazer" (só em memória): a fase anterior e o slot dela, pausado agora
+                slot = timer.pause(timer.tick(self.state["slot"], self.clock()), self.clock())
+                self.last_phase = (self.state["active_phase"], slot)
             self.state["active_phase"] = phase
             self.state["slot"] = timer.new_slot(0)
+            self._save()
+
+    def undo_phase(self) -> None:
+        """Volta à fase ativa anterior, com a mesma equipe e o tempo que ela tinha (pausado)."""
+        with self._lock:
+            if not self.last_phase:
+                raise ValueError(["Não há mudança de fase para desfazer."])
+            phase, slot = self.last_phase
+            self.state["active_phase"] = phase
+            self.state["slot"] = dict(slot)
+            self.last_phase = None
+            self._clamp_slot()
             self._save()
 
     # -- cronômetro ----------------------------------------------------
@@ -276,10 +294,22 @@ class Store:
                 slot = timer.pause(slot, now)
             elif action == "add":
                 slot = timer.add(slot, ADD_MS, now)
+            elif action == "sub":
+                slot = timer.sub(slot, ADD_MS, now)
             elif action == "reset":
-                slot = timer.reset(slot)
+                # guarda o tempo usado, pausado neste instante, para "Desfazer" (action "back")
+                outgoing = {k: v for k, v in timer.pause(slot, now).items() if k != "prev"}
+                slot = {**timer.reset(slot), "prev": outgoing}
             elif action == "next":
-                slot = timer.advance(slot)
+                # guarda a equipe que sai, pausada neste instante, para "Desfazer" (action "back")
+                outgoing = {k: v for k, v in timer.pause(slot, now).items() if k != "prev"}
+                slot = {**timer.advance(slot), "prev": outgoing}
+            elif action == "back":
+                prev = slot.get("prev")
+                order = self.state["orders"][str(self.state["active_phase"])]
+                if not prev or prev["index"] >= len(order):
+                    raise ValueError(["Não há o que desfazer no cronômetro."])
+                slot = dict(prev)   # volta pausado, com o tempo de antes de "Próxima" ou "Reiniciar"
             else:
                 raise ValueError(["Ação inválida."])
             self.state["slot"] = slot
@@ -334,9 +364,29 @@ class Store:
     def delete_attempt(self, attempt_id) -> None:
         with self._lock:
             attempt = self._attempt(attempt_id)
+            # o suficiente para "Desfazer" (só em memória): volta no mesmo lugar, com o mesmo id e T
+            self.last_deleted_attempt = (self.state["attempts"].index(attempt), dict(attempt))
             self.state["attempts"].remove(attempt)
             self._save()
             self._backup("excluida", attempt["team_id"], attempt["phase"])
+
+    def restore_attempt(self, attempt_id) -> dict:
+        """Desfaz a última exclusão de tentativa, na posição original (mesmo T1/T2/T3)."""
+        with self._lock:
+            snap = self.last_deleted_attempt
+            if not snap or snap[1]["id"] != attempt_id:
+                raise ValueError(["Não há exclusão desta tentativa para desfazer."])
+            index, attempt = snap
+            self._team(attempt["team_id"])
+            count = sum(1 for a in self.state["attempts"]
+                        if a["team_id"] == attempt["team_id"] and a["phase"] == attempt["phase"])
+            if count >= MAX_ATTEMPTS:
+                raise ValueError(["Limite de 3 tentativas por fase atingido: exclua uma antes de desfazer."])
+            self.state["attempts"].insert(min(index, len(self.state["attempts"])), dict(attempt))
+            self.last_deleted_attempt = None
+            self._save()
+            self._backup("restaurada", attempt["team_id"], attempt["phase"])
+            return dict(attempt)
 
     def best_by_phase(self) -> dict:
         with self._lock:

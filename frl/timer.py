@@ -36,6 +36,11 @@ def add(slot: dict, ms: int, now_ms: float) -> dict:
     return {**slot, "remaining_ms": rem}
 
 
+def sub(slot: dict, ms: int, now_ms: float) -> dict:
+    """Tira tempo (corrige um "+1 min" a mais); nunca abaixo de 00:00."""
+    return add(slot, -min(ms, remaining(slot, now_ms)), now_ms)
+
+
 def reset(slot: dict) -> dict:
     return new_slot(slot["index"])
 

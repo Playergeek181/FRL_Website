@@ -146,6 +146,37 @@
     renderAttempts();
     renderOrder();
     renderTeams();
+    renderStandings();
+  }
+
+  // Classificação: a mesma tabela da TV, para o operador conferir os números antes da sala.
+  function renderStandings() {
+    var flying = state.current ? state.current.id : null;
+    var key = JSON.stringify([state.phase, flying, state.ranking]);
+    if (sig.standings === key) return;
+    sig.standings = key;
+    var ths = document.querySelectorAll("#rank-mini th[data-p]");
+    for (var i = 0; i < ths.length; i++) ths[i].classList.toggle("active", Number(ths[i].dataset.p) === state.phase);
+    var tb = $("rank-mini-body");
+    tb.textContent = "";
+    if (!state.ranking.length) {
+      tb.appendChild(el("tr", {}, [el("td", { colSpan: 7, className: "muted", textContent: "Nenhuma equipe cadastrada." })]));
+      return;
+    }
+    state.ranking.forEach(function (r) {
+      var unranked = r.position === null || r.position === undefined;
+      var cells = [el("td", { className: "pos" + (unranked ? " nil" : ""), textContent: unranked ? "–" : String(r.position) })];
+      var name = el("td", { className: "name", textContent: r.name });
+      if (r.team_id === flying) name.appendChild(el("span", { className: "o-tag cur", textContent: "na arena" }));
+      cells.push(name);
+      for (var p = 1; p <= 4; p++) {
+        var v = r.phase_points[String(p)], nil = v === null || v === undefined;
+        cells.push(el("td", { className: "ph" + (nil || (unranked && v === 0) ? " nil" : "") + (p === state.phase ? " active" : ""),
+                              textContent: nil ? "–" : String(v) }));
+      }
+      cells.push(el("td", { className: "total" + (unranked ? " nil" : ""), textContent: unranked ? "–" : String(r.total) }));
+      tb.appendChild(el("tr", { className: r.team_id === flying ? "flying" : "" }, cells));
+    });
   }
 
   function remainingMs() {
@@ -173,12 +204,31 @@
     }
     var spoken = fmt(ms).slice(0, 5) + " restantes";     // leitor de tela: segundos, não ms
     if (spoken !== lastSpoken) { lastSpoken = spoken; c.setAttribute("aria-label", spoken); }
+    renderMiniClock(ms, st);
+  }
+
+  // Relógio compacto no celular: só quando a faixa da arena saiu da tela e há equipe voando.
+  var arenaVisible = true, narrow = window.matchMedia("(max-width: 900px)");
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(function (es) { arenaVisible = es[0].isIntersecting; }).observe($("arena"));
+  }
+  function renderMiniClock(ms, st) {
+    var m = $("mini-clock"), show = narrow.matches && !arenaVisible && !!state.current;
+    if (m.hidden === show) m.hidden = !show;
+    if (!show) return;
+    var t = fmt(ms).slice(0, 5);
+    if ($("mini-cd").textContent !== t) $("mini-cd").textContent = t;
+    $("mini-cd").classList.toggle("low", ms < LOW_MS);
+    if ($("mini-team").textContent !== state.current.name) $("mini-team").textContent = state.current.name;
+    if ($("mini-st").textContent !== st) $("mini-st").textContent = st;
   }
 
   function renderArena() {
     var sel = $("phase-select");
     if (document.activeElement !== sel) sel.value = String(state.phase);
     $("phase-name").textContent = state.phase_name;
+    $("strip-phase").textContent = "Fase " + state.phase;
+    $("strip-phase-name").textContent = state.phase_name;
     var noOrder = !state.current && !state.phase_finished;
     $("arena-name").textContent = state.current ? state.current.name :
       (state.phase_finished ? "Fase encerrada" : "Sem ordem de voo");
@@ -192,6 +242,7 @@
     $("b-start").disabled = t.running || expired || !state.current;
     $("b-pause").disabled = !t.running;
     $("b-plus").disabled = !state.current;
+    $("b-minus").disabled = !state.current || expired;
     $("b-reset").disabled = !state.current;
     $("b-next").disabled = !state.current;
     $("b-next").className = expired ? "primary" : "go";   // em 00:00 o próximo passo é chamar a próxima
@@ -402,8 +453,9 @@
         if (editingId === att.id) stopEdit();
         quiet(act(api("DELETE", "/api/attempts/" + att.id)).then(function () {
           ok(what + " excluída.", { label: "Desfazer", run: function () {
-            quiet(act(api("POST", "/api/attempts", { team_id: att.team_id, phase: att.phase, inputs: att.inputs }))
-              .then(function () { ok("Tentativa restaurada (" + att.points + " pts)."); }));
+            // volta no mesmo lugar e com o mesmo id: continua sendo T1/T2/T3 como antes
+            quiet(act(api("POST", "/api/attempts/" + att.id + "/restore"))
+              .then(function () { ok(what + " restaurada."); }));
           } });
         }));
       }; })(a, k + 1, team.name);
@@ -563,6 +615,13 @@
 
   // -- eventos ---------------------------------------------------------
   $("new-logo").onchange = function () { fileName(this); };
+  // a fase ativa muda raramente e mexe na TV: fica em Preparação, longe dos botões do cronômetro
+  $("mini-clock").onclick = function () { $("arena").scrollIntoView({ behavior: "smooth", block: "start" }); };
+  $("change-phase").onclick = function () {
+    $("prep").open = true;
+    $("prep").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("phase-select").focus({ preventScroll: true });
+  };
   $("open-prep").onclick = function () {
     $("prep").open = true;
     $("prep").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -588,20 +647,43 @@
       var action = b.dataset.timer, q = timerConfirm(action), cur = state.current;
       if (q && !confirm(q)) return;
       quiet(act(api("POST", "/api/timer/" + action)).then(function (s) {
-        if (action === "next") ok(s.current ? "Na arena: " + s.current.name + "." : "Fase encerrada: todas as equipes voaram.");
-        else if (action === "reset" && cur) ok("Cronômetro de " + cur.name + " reiniciado.");
+        if (action === "next" && cur) {
+          ok(s.current ? "Na arena: " + s.current.name + "." : "Fase encerrada: todas as equipes voaram.", {
+            label: "Desfazer", run: function () {
+              quiet(act(api("POST", "/api/timer/back")).then(function () {
+                ok("De volta: " + cur.name + " na arena, cronômetro pausado.");
+              }));
+            } });
+        }
+        else if (action === "reset" && cur) ok("Cronômetro de " + cur.name + " reiniciado.", {
+          label: "Desfazer", run: function () {
+            quiet(act(api("POST", "/api/timer/back")).then(function () {
+              ok("Tempo de " + cur.name + " restaurado, cronômetro pausado.");
+            }));
+          } });
       }));
     };
   });
   $("phase-select").onchange = function () {
     var p = parseInt(this.value, 10);
     if (p === state.phase) { this.blur(); return; }
-    if (!confirm("Mudar a fase ativa reinicia o cronômetro da arena. Continuar?")) {
+    // diz quem fica na arena: a fase nova começa pela 1ª equipe da ordem dela, com 30:00
+    var first = (state.orders[String(p)] || [])[0], ft = state.teams.filter(function (t) { return t.id === first; })[0];
+    var who = ft ? "A arena passa para " + ft.name + " (1ª da ordem) com 30:00." :
+      "A Fase " + p + " ainda não tem ordem de voo: a arena fica vazia.";
+    var from = state.phase, fromTeam = state.current;
+    if (!confirm("Mudar a fase ativa para a Fase " + p + "? " + who)) {
       this.value = String(state.phase); this.blur(); return;
     }
     if (editingId) stopEdit();
     attPhaseTouched = false;            // painel de tentativas volta a seguir a fase ativa
-    quiet(act(api("POST", "/api/phase", { phase: p })));
+    quiet(act(api("POST", "/api/phase", { phase: p })).then(function () {
+      ok("Fase ativa: Fase " + p + ".", { label: "Desfazer", run: function () {
+        quiet(act(api("POST", "/api/phase/undo")).then(function () {
+          ok("De volta à Fase " + from + (fromTeam ? ", com " + fromTeam.name + " na arena (pausado)." : "."));
+        }));
+      } });
+    }));
     this.blur();
   };
   $("att-phase-select").onchange = function () {   // não chama /api/phase: TV e cronômetro intactos
@@ -671,7 +753,7 @@
     }));
   };
 
-  // Atalhos: Espaço inicia/pausa e N chama a próxima equipe (fora de campos de texto);
+  // Atalhos: Espaço inicia/pausa, +/− somam ou tiram 1 minuto e N chama a próxima equipe (fora de campos de texto);
   // Ctrl+Enter salva a tentativa de qualquer lugar. As confirmações continuam valendo.
   document.addEventListener("keydown", function (e) {
     if (!state || e.altKey || e.metaKey) return;
@@ -681,15 +763,28 @@
     }
     if (e.ctrlKey) return;
     var t = e.target, tag = t && t.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON" || tag === "SUMMARY" ||
-        (t && t.isContentEditable)) return;
-    if (e.key === " ") {
+    // Botões do cronômetro não bloqueiam os atalhos: depois de clicar em "+1 min", Espaço ainda
+    // pausa (e não aperta "+1 min" de novo). Os demais botões mantêm o comportamento nativo.
+    var timerBtn = tag === "BUTTON" && t.hasAttribute("data-timer");
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || (tag === "BUTTON" && !timerBtn) ||
+        tag === "SUMMARY" || (t && t.isContentEditable)) return;
+    if (e.key === "+" || e.key === "=") {
+      if (!$("b-plus").disabled) { e.preventDefault(); $("b-plus").click(); }
+    } else if (e.key === "-" || e.key === "_") {
+      if (!$("b-minus").disabled) { e.preventDefault(); $("b-minus").click(); }
+    } else if (e.key === " ") {
       var b = state.timer.running ? $("b-pause") : $("b-start");
       e.preventDefault();
       if (!b.disabled) b.click();
     } else if (e.key === "n" || e.key === "N") {
       if (!$("b-next").disabled) { e.preventDefault(); $("b-next").click(); }
     }
+  });
+
+  // Firefox aperta o botão focado no keyup do Espaço; o atalho já agiu no keydown.
+  document.addEventListener("keyup", function (e) {
+    var t = e.target;
+    if (e.key === " " && t && t.tagName === "BUTTON" && t.hasAttribute("data-timer")) e.preventDefault();
   });
 
   // -- polling ---------------------------------------------------------

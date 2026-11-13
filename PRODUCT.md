@@ -32,7 +32,7 @@ Built for this one competition's rules: scoring for the four FRL 2026 phases, th
 
 - Team registry with optional logos (png, jpg, webp, svg) and a per-team open-hardware default.
 - Per-phase flight order: manual reordering, plus a fair random draw that applies only once it is saved.
-- Timer per slot: start/resume, pause, +1 min, reset, next team. At 00:00 it stops in a "Tempo esgotado" state until the operator calls the next team. The countdown shows milliseconds.
+- Timer per slot: start/resume, pause, +1 / −1 min, reset, next team. Reset, next team, and changing the active phase can be undone (the slot comes back paused with the time it had). At 00:00 it stops in a "Tempo esgotado" state until the operator calls the next team. The countdown shows milliseconds.
 - Attempt entry with live points preview and validation against the rules; edit and delete earlier attempts, including for a phase other than the active one.
 - Ranking: only teams that scored get a position; unscored phases show a dash.
 - State is persisted to `data/state.json` with an automatic `.bak` and recovery from corruption.
@@ -43,6 +43,8 @@ Built for this one competition's rules: scoring for the four FRL 2026 phases, th
 
 - Event name in use: "Flying Robots League 2026" (TV) and "Placar FRL 2026" (control page).
 - **Official CBR / RoboCup / FRL logos and sponsor logos must appear on the TV.** They sit in the TV's bottom band in the CBR's three groups (Organização, Apoio, Patrocínio), built from the individual official files in `logos-oficiais/PNG/` and `logos-oficiais/SVG/` (trimmed copies served from `frl/static/brand/sponsors/`).
+- **SECTIES + Governo da Paraíba:** `logos-oficiais/Logo Secties + GOV (5).png` replaces the Governo da Paraíba logo in the band (`04-governo-paraiba-com-slogan.png`).
+- **CBR 2026 com Petrobras badge in the TV's top-left corner:** `logos-oficiais/CBR com Petrobras Branco@2x.png` (white artwork for the black top bar, served as `frl/static/brand/cbr-petrobras.png`) replaces the CBR wordmark there. The Petrobras logo also stays in the band's Patrocínio group.
 - Team identity comes from each team's own logo. The logos in `logos-equipes/` are the teams' real logos.
 
 ## Evidence on Hand
@@ -50,8 +52,9 @@ Built for this one competition's rules: scoring for the four FRL 2026 phases, th
 - Official rules: `Regras-Flying-Robots-League-CBR-2026-Portugues.pdf`.
 - Registered team list from the organisers (`Equipes` image): Capybots, Bahia RT, TechAgroS, GralhaBots, Equipe DroneIFSC, RobôCin, TauraBots, AsiMAV, Black Bee Drones, eVTOL ITA, FBOT @Hydrone.
 - Team logos: `logos-equipes/Real/` holds the originals as supplied (150×150 JPG); `logos-equipes/<equipe>.png` are PNG copies of the same images, the ones uploaded to the scoreboard.
+- Official logo files supplied for the band: `logos-oficiais/PNG/` and `logos-oficiais/SVG/`, plus two later deliveries, `logos-oficiais/Logo Secties + GOV (5).png` (842×123, transparent) and `logos-oficiais/CBR com Petrobras Branco@2x.png` (2560×2048, transparent, white artwork with a dark outline).
 - Official logos taken from https://cbr.robocup.org.br/ (low resolution; ask the organisers for the originals): `logos-oficiais/cbr-logo.png` (CBR wordmark, 300×106), `logos-oficiais/patrocinio-faixa.png` (Organização / Apoio / Patrocínio strip cropped from the site's footer banner `patrocinio-banner.png`, which is the "Período Eleitoral" version), `logos-oficiais/frl-icone-drone.png` (the site's FRL category icon, 77×77, not a logo).
-- Absent, and must not be fabricated: an official FRL logo, real team logos, real scores and results.
+- Absent, and must not be fabricated: an official FRL logo, real scores and results.
 
 ## Product Principles
 

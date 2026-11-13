@@ -219,3 +219,22 @@ def test_state_reports_time_up_and_slot_index(tmp_path):
     c.post("/api/orders/1", json={"team_ids": [a]})
     s = c.get("/api/state").get_json()
     assert s["slot_index"] == 0 and s["timer"]["expired"] is False
+
+
+def test_undo_next_and_restore_attempt_routes(client):
+    ids = [client.post("/api/teams", data={"name": n}).get_json()["teams"][-1]["id"] for n in ("A", "B")]
+    client.post("/api/orders/1", json={"team_ids": ids})
+    assert client.post("/api/timer/next").get_json()["current"]["id"] == ids[1]
+    assert client.post("/api/timer/back").get_json()["current"]["id"] == ids[0]
+    assert client.post("/api/timer/back").status_code == 400
+    inputs = {"bases": 3, "repeats": 0, "returned": True, "open_hw": False}
+    att = client.post("/api/attempts", json={"team_id": ids[0], "phase": 1, "inputs": inputs}).get_json()["attempts"][0]
+    client.delete(f"/api/attempts/{att['id']}")
+    s = client.post(f"/api/attempts/{att['id']}/restore").get_json()
+    assert [a["id"] for a in s["attempts"]] == [att["id"]]
+
+
+def test_phase_undo_route(client):
+    assert client.post("/api/phase/undo").status_code == 400
+    client.post("/api/phase", json={"phase": 2})
+    assert client.post("/api/phase/undo").get_json()["phase"] == 1

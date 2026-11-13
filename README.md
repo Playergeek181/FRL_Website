@@ -84,20 +84,21 @@ Na página de controle, abra **Preparação** (no fim da página).
 
 #### Durante a competição
 
-1. **Fase ativa** (no topo): escolha a fase que está acontecendo. A TV mostra essa fase.
+1. **Fase ativa:** aparece no topo, ao lado da equipe na arena; para mudar, use **Mudar em Preparação** (a fase muda raramente e mexe na TV, por isso fica longe do cronômetro). A confirmação diz qual equipe entra na arena, e **Desfazer** volta à fase anterior com a equipe e o tempo que ela tinha.
 2. **Na arena:** a primeira equipe da ordem de voo entra automaticamente. Ao lado aparece quem vem a seguir.
 3. **Cronômetro (30:00 por equipe):**
    - **Iniciar** / **Pausar** (depois de pausar, vira **Retomar**).
-   - **+1 min** dá um minuto extra.
-   - **Reiniciar** volta a 30:00.
-   - **Próxima equipe** chama a próxima da ordem (pede confirmação).
-   - Ao chegar a 00:00, o cronômetro **para** e a TV mostra "Tempo esgotado"; a equipe continua na arena até você apertar **Próxima equipe**.
+   - **+1 min** dá um minuto extra; **−1 min** tira um (corrige um minuto a mais).
+   - **Reiniciar** volta a 30:00. **Desfazer**, no aviso, devolve o tempo que a equipe tinha, pausado.
+   - **Próxima equipe** chama a próxima da ordem (pede confirmação). Errou? **Desfazer**, no aviso que aparece por alguns segundos, volta a equipe anterior com o tempo que ela tinha, com o cronômetro pausado.
+   - Ao chegar a 00:00, o cronômetro **para** e a TV mostra "Tempo esgotado"; a equipe continua na arena até você apertar **Próxima equipe**. Pausado, a TV mostra os números apagados e "Pausado" em destaque. Se a TV ficar mais de 5 s sem falar com o servidor, o cronômetro dela para e aparece "Reconectando…" (volta sozinho).
 4. **Registrar tentativa:** escolha a fase e a equipe, preencha os campos (botões − e + ajudam no celular) e clique em **Salvar tentativa**. A fórmula e os pontos aparecem antes de salvar; um campo inválido fica vermelho e explica o problema.
 5. **Tentativas:** a lista ao lado mostra as tentativas salvas; dá para editar ou excluir.
+6. **Classificação:** embaixo das tentativas, a mesma tabela da TV, para conferir os números.
 
-**Atalhos de teclado** (fora de campos de texto): `Espaço` inicia/pausa, `N` chama a próxima equipe, `Ctrl+Enter` salva a tentativa.
+**Atalhos de teclado** (fora de campos de texto): `Espaço` inicia/pausa, `+` / `−` somam ou tiram 1 minuto, `N` chama a próxima equipe, `Ctrl+Enter` salva a tentativa. Funcionam também logo depois de clicar num botão do cronômetro.
 
-**Excluir equipe** mostra quantas tentativas e pontos serão perdidos e oferece **Desfazer** por alguns segundos (só até o servidor ser reiniciado; depois, use um backup).
+**Excluir equipe** mostra quantas tentativas e pontos serão perdidos e oferece **Desfazer** por alguns segundos (só até o servidor ser reiniciado; depois, use um backup). **Excluir tentativa** também oferece **Desfazer**, que a devolve no mesmo lugar (continua sendo T1, T2 ou T3).
 
 #### Classificação
 
@@ -256,20 +257,21 @@ On the control page, open **Preparação** at the bottom of the page.
 
 #### During the competition
 
-1. **Fase ativa (active phase)** at the top: pick the phase being run. The TV shows that phase.
+1. **Fase ativa (active phase):** shown at the top beside the team in the arena; to change it, use **Mudar em Preparação** (it changes rarely and affects the TV, so it sits away from the timer). The confirmation says which team goes into the arena, and **Desfazer** (undo) goes back to the previous phase with its team and time.
 2. **Na arena (in the arena):** the first team in the flight order goes in automatically. Who's next is shown beside it.
 3. **Timer (30:00 per team):**
    - **Iniciar** / **Pausar** start and pause (after a pause it reads **Retomar**, resume).
-   - **+1 min** adds a minute.
-   - **Reiniciar** resets to 30:00.
-   - **Próxima equipe** calls the next team in the order (asks to confirm).
-   - At 00:00 the timer **stops** and the TV shows "Tempo esgotado" (time's up); the team stays in the arena until you press **Próxima equipe**.
+   - **+1 min** adds a minute; **−1 min** takes one off (fixes an extra minute).
+   - **Reiniciar** resets to 30:00. **Desfazer** (undo), in the notice, gives back the time the team had, paused.
+   - **Próxima equipe** calls the next team in the order (asks to confirm). Pressed it by mistake? **Desfazer** (undo), in the notice shown for a few seconds, brings back the previous team with the time it had, timer paused.
+   - At 00:00 the timer **stops** and the TV shows "Tempo esgotado" (time's up); the team stays in the arena until you press **Próxima equipe**. When paused, the TV dims the digits and shows "Pausado" large. If the TV can't reach the server for more than 5 s, its clock stops and "Reconectando…" appears (it recovers by itself).
 4. **Registrar tentativa (record an attempt):** pick the phase and team, fill in the fields (the − and + buttons help on a phone) and click **Salvar tentativa**. The formula and points show before you save; an invalid field turns red and says what's wrong.
 5. **Tentativas (attempts):** the list beside it shows saved attempts; you can edit or delete them.
+6. **Classificação (standings):** below the attempts, the same table as the TV, to check the numbers.
 
-**Keyboard shortcuts** (outside text fields): `Space` start/pause, `N` next team, `Ctrl+Enter` save the attempt.
+**Keyboard shortcuts** (outside text fields): `Space` start/pause, `+` / `−` add or remove 1 minute, `N` next team, `Ctrl+Enter` save the attempt. They also work right after clicking a timer button.
 
-**Deleting a team** shows how many attempts and points will be lost and offers **Desfazer** (undo) for a few seconds (only until the server restarts; after that, use a backup).
+**Deleting a team** shows how many attempts and points will be lost and offers **Desfazer** (undo) for a few seconds (only until the server restarts; after that, use a backup). **Deleting an attempt** also offers **Desfazer**, which puts it back in the same place (it stays T1, T2 or T3).
 
 #### Standings
 
