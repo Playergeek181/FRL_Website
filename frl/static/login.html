@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar - Placar FRL 2026</title>
+<link rel="preload" href="/static/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/common.css">
+<link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+<header class="bar"><a href="/"><img src="/static/brand/cbr-petrobras.png" alt="CBR 2026"></a></header>
+<main class="card-wrap">
+  <form class="card" method="post" action="/login">
+    <h1>Entrar</h1>
+    <p class="lead">Acesso para árbitros e operadores do placar.</p>
+    <div class="alert" id="err" role="alert" hidden></div>
+    <input type="hidden" name="next" id="next" value="/controle">
+    <label>Usuário <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus></label>
+    <label>Senha <input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary submit" type="submit">Entrar</button>
+    <p class="back"><a href="/">Voltar ao início</a> · <a href="/tv">Ver placar</a></p>
+  </form>
+</main>
+<script>
+var q = new URLSearchParams(location.search);
+var n = q.get("next"); if (n === "/controle" || n === "/usuarios") document.getElementById("next").value = n;
+var e = q.get("error"), box = document.getElementById("err");
+if (e === "bad") { box.textContent = "Usuário ou senha incorretos."; box.hidden = false; }
+if (e === "locked") { box.textContent = "Muitas tentativas. Aguarde " + (parseInt(q.get("wait"), 10) || 60) + " segundos e tente de novo."; box.hidden = false; }
+</script>
+</body>
+</html>

@@ -71,6 +71,8 @@ Deixe a janela do terminal aberta enquanto usa o placar. Para parar, aperte `Ctr
 
 **Usar em outro aparelho da mesma rede (celular, notebook, TV):** descubra o IP do computador (`hostname -I` no Linux, `ipconfig getifaddr en0` no macOS, `ipconfig` no Windows) e abra `http://<ip>:8000/tv` ou `http://<ip>:8000/controle`. Se não abrir, libere a porta 8000 no firewall do computador.
 
+**Login (obrigatório):** defina `FRL_USER` e `FRL_PASSWORD` antes de iniciar; sem eles o placar não abre. Eles criam (ou redefinem) o **administrador** inicial. A página inicial (`/`) e a TV (`/tv`) são abertas a todos; o controle (`/controle`) pede login numa página própria. O administrador cria e remove operadores em `/usuarios` (botão **Usuários** no controle); não existe cadastro aberto. As senhas ficam com hash em `data/users.json` (mín. 8 caracteres); 5 erros seguidos bloqueiam o login por 60 s; a sessão dura 12 h. Ex. Linux/macOS: `FRL_USER=admin FRL_PASSWORD=senha-forte .venv/bin/python -m frl`. Windows (PowerShell): `$env:FRL_USER="admin"; $env:FRL_PASSWORD="senha-forte"; .venv\Scripts\python -m frl`. No serviço systemd, adicione `Environment=FRL_USER=...` e `Environment=FRL_PASSWORD=...`. Se o site for público na internet, use HTTPS.
+
 **Opções:** os dados ficam em `data/` (`state.json`, `logos/` e `backups/`). Para usar outra pasta, defina a variável `FRL_DATA_DIR` antes de iniciar (ex.: `FRL_DATA_DIR=/caminho/da/pasta .venv/bin/python -m frl`).
 
 ### Como usar
@@ -243,6 +245,8 @@ Windows:
 Keep the terminal window open while you use the scoreboard. To stop it, press `Ctrl+C` in that window.
 
 **Using it from another device on the same network (phone, laptop, TV):** find the computer's IP address (`hostname -I` on Linux, `ipconfig getifaddr en0` on macOS, `ipconfig` on Windows) and open `http://<ip>:8000/tv` or `http://<ip>:8000/controle`. If it doesn't load, allow port 8000 through the computer's firewall.
+
+**Login (required):** set `FRL_USER` and `FRL_PASSWORD` before starting; the scoreboard won't start without them. They create (or reset) the initial **administrator**. The home page (`/`) and the TV (`/tv`) are open to everyone; the control page (`/controle`) asks for login on its own page. The administrator creates and removes operators at `/usuarios` (**Users** button on the control page); there is no open signup. Passwords are hashed in `data/users.json` (min. 8 characters); 5 failed attempts in a row lock login for 60 s; sessions last 12 h. E.g. Linux/macOS: `FRL_USER=admin FRL_PASSWORD=strong-pass .venv/bin/python -m frl`. Windows (PowerShell): `$env:FRL_USER="admin"; $env:FRL_PASSWORD="strong-pass"; .venv\Scripts\python -m frl`. For the systemd service, add `Environment=FRL_USER=...` and `Environment=FRL_PASSWORD=...`. If the site is public on the internet, use HTTPS.
 
 **Options:** data lives in `data/` (`state.json`, `logos/` and `backups/`). To use another folder, set `FRL_DATA_DIR` before starting (e.g. `FRL_DATA_DIR=/path/to/folder .venv/bin/python -m frl`).
 

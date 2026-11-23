@@ -1,7 +1,11 @@
 """Aplicação Flask: páginas e API JSON do placar."""
+import os
+import secrets
+from datetime import timedelta
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 
-from flask import Flask, jsonify, redirect, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from werkzeug.exceptions import BadRequest, HTTPException
 
 from . import timer
@@ -9,6 +13,7 @@ from .constants import PHASE_NAMES
 from .ranking import overall_ranking
 from .scoring import attempt_points, attempt_problems
 from .store import Store
+from .users import LoginThrottle, UserStore
 
 STATIC_DIR = Path(__file__).parent / "static"
 LOGO_EXTS = {"png", "jpg", "jpeg", "webp", "svg"}
@@ -28,12 +33,136 @@ def _truthy(value) -> bool:
     return str(value).strip().lower() in ("1", "true", "on", "sim", "yes")
 
 
-def create_app(data_dir: Path) -> Flask:
+def create_app(data_dir: Path, auth: tuple[str, str] | None = None) -> Flask:
     data_dir = Path(data_dir)
     logo_dir = data_dir / "logos"
     app = Flask(__name__, static_folder=None)
     app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
     store = Store(data_dir)
+
+    # -- login ---------------------------------------------------------
+    # Com `auth`, a página de controle, a gestão de usuários e tudo que altera
+    # dados exigem sessão. A TV (/tv) e GET /api/state continuam públicos.
+    users = UserStore(data_dir) if auth else None
+    throttle = LoginThrottle()
+    if auth:
+        users.ensure_admin(*auth)
+        key_path = data_dir / "secret_key"
+        if not key_path.exists():
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            key_path.write_bytes(secrets.token_bytes(32))
+            os.chmod(key_path, 0o600)
+        app.secret_key = key_path.read_bytes()
+        app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
+                          PERMANENT_SESSION_LIFETIME=timedelta(hours=12))
+
+    def current_user():
+        if not users:
+            return {"username": "local", "role": "admin"}
+        u = users.get(session.get("u", ""))
+        # a sessão só vale enquanto o usuário existir e a senha não tiver mudado
+        if u and session.get("h") == u["hash"][-16:]:
+            return u
+        return None
+
+    def login_required_response(api: bool):
+        if api:
+            return jsonify(errors=["Login necessário"]), 401
+        return redirect("/login?next=" + quote(request.path))
+
+    @app.before_request
+    def _guard():
+        if not users:
+            return None
+        path = request.path
+        api = path.startswith("/api/")
+        write = request.method not in ("GET", "HEAD", "OPTIONS")
+        if write:  # defesa extra contra CSRF, além de SameSite=Lax
+            origin = request.headers.get("Origin")
+            if origin and urlsplit(origin).netloc != request.host:
+                return jsonify(errors=["Origem inválida"]), 403
+        admin_only = path == "/usuarios" or path.startswith("/api/users")
+        if not (path in ("/controle", "/usuarios") or admin_only or (api and write)):
+            return None
+        u = current_user()
+        if not u:
+            return login_required_response(api)
+        if admin_only and u["role"] != "admin":
+            return (jsonify(errors=["Apenas administradores"]), 403) if api else redirect("/controle")
+        return None
+
+    def safe_next(target):
+        return target if target in ("/controle", "/usuarios") else "/controle"
+
+    @app.get("/login")
+    def login_page():
+        if current_user() and users:
+            return redirect(safe_next(request.args.get("next")))
+        return send_from_directory(STATIC_DIR, "login.html")
+
+    @app.post("/login")
+    def login_post():
+        name = (request.form.get("username") or "").strip()
+        nxt = safe_next(request.form.get("next"))
+        tkey = (request.remote_addr, name.lower())
+        wait = throttle.locked(tkey)
+        if wait:
+            return redirect(f"/login?error=locked&wait={wait}&next={quote(nxt)}")
+        u = users.verify(name, request.form.get("password")) if users else None
+        if not u:
+            throttle.fail(tkey)
+            return redirect(f"/login?error=bad&next={quote(nxt)}")
+        throttle.ok(tkey)
+        session.clear()
+        session.permanent = True
+        session["u"], session["h"] = u["username"], u["hash"][-16:]
+        return redirect(nxt)
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect("/")
+
+    @app.get("/api/me")
+    def me():
+        u = current_user()
+        return jsonify(user=({"username": u["username"], "role": u["role"]} if u else None))
+
+    @app.get("/usuarios")
+    def users_page():
+        if not users:
+            return redirect("/controle")
+        return send_from_directory(STATIC_DIR, "usuarios.html")
+
+    @app.get("/api/users")
+    def users_list():
+        if not users:
+            return jsonify(errors=["Login desativado"]), 404
+        return jsonify(users=users.list())
+
+    @app.post("/api/users")
+    def users_create():
+        if not users:
+            return jsonify(errors=["Login desativado"]), 404
+        d = body()
+        users.create(d.get("username"), d.get("password"), d.get("role") or "operator")
+        return jsonify(users=users.list())
+
+    @app.post("/api/users/<name>/password")
+    def users_password(name):
+        if not users:
+            return jsonify(errors=["Login desativado"]), 404
+        users.set_password(name, body().get("password"))
+        return jsonify(users=users.list())
+
+    @app.delete("/api/users/<name>")
+    def users_delete(name):
+        if not users:
+            return jsonify(errors=["Login desativado"]), 404
+        if name.lower() == current_user()["username"].lower():
+            raise ValueError(["Você não pode remover a si mesmo"])
+        users.delete(name)
+        return jsonify(users=users.list())
 
     # -- erros ---------------------------------------------------------
     @app.errorhandler(ValueError)
@@ -100,7 +229,7 @@ def create_app(data_dir: Path) -> Flask:
     # -- páginas -------------------------------------------------------
     @app.get("/")
     def index():
-        return redirect("/tv")
+        return send_from_directory(STATIC_DIR, "home.html")
 
     @app.get("/tv")
     def tv():

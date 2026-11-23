@@ -113,6 +113,7 @@
       else { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
     }
     return fetch(url, opts).then(function (r) {
+      if (r.status === 401) { location.href = "/login?next=/controle"; }
       return r.json().then(function (j) {
         if (!r.ok) { var e = new Error("api"); e.errors = j.errors || ["Erro " + r.status]; e.fields = j.fields; throw e; }
         return j;
@@ -227,11 +228,11 @@
     var sel = $("phase-select");
     if (document.activeElement !== sel) sel.value = String(state.phase);
     $("phase-name").textContent = state.phase_name;
-    $("strip-phase").textContent = "Fase " + state.phase;
-    $("strip-phase-name").textContent = state.phase_name;
+    $("strip-phase").textContent = phaseLabel(state.phase);
+    $("strip-phase-name").textContent = state.phase === 0 ? "Sem pontuação" : state.phase_name;
     var noOrder = !state.current && !state.phase_finished;
     $("arena-name").textContent = state.current ? state.current.name :
-      (state.phase_finished ? "Fase encerrada" : "Sem ordem de voo");
+      (state.phase_finished ? (state.phase === 0 ? "Aquecimento encerrado" : "Fase encerrada") : "Sem ordem de voo");
     $("next-name").textContent = state.next ? state.next.name : (state.current ? "última equipe da fase" : "—");
     $("next-line").hidden = noOrder;
     $("open-prep").hidden = !noOrder;
@@ -252,17 +253,19 @@
     renderCountdown();
   }
 
+  function phaseLabel(p) { return p === 0 ? "Aquecimento" : "Fase " + p; }
+
   function selectedTeamId() { return $("team-select").value || null; }
 
   // fase usada por "Registrar tentativa" / "Tentativas": segue a fase ativa até o
   // operador escolher outra (corrigir fase anterior sem mexer na TV/cronômetro)
   function renderAttPhase() {
-    if (!attPhaseTouched || attPhase === null) attPhase = state.phase;
+    if (!attPhaseTouched || attPhase === null) attPhase = state.phase || 1;  // Aquecimento não tem tentativas
     var sel = $("att-phase-select");
     if (document.activeElement !== sel) sel.value = String(editingId ? editingPhase() : attPhase);
     sel.disabled = !!editingId;
-    $("att-phase-note").textContent = attPhase !== state.phase ?
-      "Registrando na Fase " + attPhase + "; a arena está na Fase " + state.phase + "." : "";
+    $("att-phase-note").textContent = state.phase === 0 ? "A arena está no Aquecimento (sem pontuação); registrando na Fase " + attPhase + "." :
+      attPhase !== state.phase ? "Registrando na Fase " + attPhase + "; a arena está na Fase " + state.phase + "." : "";
   }
   function panelTeams() {   // equipes da ordem desta fase primeiro, depois as demais
     var order = (state.orders[String(attPhase)] || []).filter(function (id) { return teamById(id); });
@@ -479,7 +482,7 @@
     else orderDraft = orderDraft.filter(function (id) { return teamById(id); });
     $("order-title").textContent = "Ordem de voo";
     $("order-note").textContent = phase !== state.phase ?
-      "Esta é a ordem da Fase " + phase + "; a arena está na Fase " + state.phase + ". Salvar não muda a arena." : "";
+      "Esta é a ordem " + (phase === 0 ? "do Aquecimento" : "da Fase " + phase) + "; a arena está " + (state.phase === 0 ? "no Aquecimento" : "na Fase " + state.phase) + ". Salvar não muda a arena." : "";
     $("order-view").hidden = orderEditing;
     $("order-editing").hidden = !orderEditing;
     $("order-edit").textContent = orderDraft.length ? "Editar ordem" : "Montar ordem";
@@ -532,7 +535,7 @@
   function shuffleOrder() {
     var n = state.attempts.filter(function (a) { return a.phase === ophase; }).length;
     if (n && !confirm("Já há " + n + (n === 1 ? " tentativa registrada" : " tentativas registradas") +
-        " na Fase " + ophase + ". Sortear a ordem mesmo assim?")) return;
+        " " + (ophase === 0 ? "no Aquecimento" : "na Fase " + ophase) + ". Sortear a ordem mesmo assim?")) return;
     // lista vazia: sorteia todas as equipes cadastradas
     var list = orderDraft.length ? orderDraft.slice() : state.teams.map(function (t) { return t.id; });
     for (var i = list.length - 1; i > 0; i--) {
@@ -670,17 +673,17 @@
     // diz quem fica na arena: a fase nova começa pela 1ª equipe da ordem dela, com 30:00
     var first = (state.orders[String(p)] || [])[0], ft = state.teams.filter(function (t) { return t.id === first; })[0];
     var who = ft ? "A arena passa para " + ft.name + " (1ª da ordem) com 30:00." :
-      "A Fase " + p + " ainda não tem ordem de voo: a arena fica vazia.";
+      (p === 0 ? "O Aquecimento" : "A Fase " + p) + " ainda não tem ordem de voo: a arena fica vazia.";
     var from = state.phase, fromTeam = state.current;
-    if (!confirm("Mudar a fase ativa para a Fase " + p + "? " + who)) {
+    if (!confirm("Mudar a fase ativa para " + (p === 0 ? "o Aquecimento" : "a Fase " + p) + "? " + who)) {
       this.value = String(state.phase); this.blur(); return;
     }
     if (editingId) stopEdit();
     attPhaseTouched = false;            // painel de tentativas volta a seguir a fase ativa
     quiet(act(api("POST", "/api/phase", { phase: p })).then(function () {
-      ok("Fase ativa: Fase " + p + ".", { label: "Desfazer", run: function () {
+      ok("Fase ativa: " + phaseLabel(p) + ".", { label: "Desfazer", run: function () {
         quiet(act(api("POST", "/api/phase/undo")).then(function () {
-          ok("De volta à Fase " + from + (fromTeam ? ", com " + fromTeam.name + " na arena (pausado)." : "."));
+          ok("De volta " + (from === 0 ? "ao Aquecimento" : "à Fase " + from) + (fromTeam ? ", com " + fromTeam.name + " na arena (pausado)." : "."));
         }));
       } });
     }));
@@ -734,7 +737,7 @@
     var phase = ophase;
     quiet(act(api("POST", "/api/orders/" + phase, { team_ids: orderDraft })).then(function () {
       orderDirty = false; orderEditing = false; sig.order = null; renderOrder();
-      ok("Ordem da Fase " + phase + " salva.");
+      ok("Ordem " + (phase === 0 ? "do Aquecimento" : "da Fase " + phase) + " salva.");
     }));
   };
   $("team-add").onsubmit = function (e) {

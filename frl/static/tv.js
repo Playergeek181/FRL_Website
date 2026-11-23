@@ -2,7 +2,7 @@
   "use strict";
   var SLOT_MS = 1800000;   // 30:00, igual a constants.SLOT_MS
   var LOW_MS = 300000;     // últimos 5 min: mesmo limiar da página de controle
-  var PHASES = { 1: "Localização e Mapeamento", 2: "Transporte de Pacotes", 3: "Interação Humano-Enxame", 4: "Navegação em Espaço Confinado" };
+  var PHASES = { 0: "Aquecimento", 1: "Localização e Mapeamento", 2: "Transporte de Pacotes", 3: "Interação Humano-Enxame", 4: "Navegação em Espaço Confinado" };
   var state = null, receivedAt = 0, lastKey = "";
   var $ = function (id) { return document.getElementById(id); };
 
@@ -101,12 +101,14 @@
     $("slot-total").textContent = "de " + fmtParts(total)[0];
   }
 
+  function phaseLabel(p) { return p === 0 ? "Aquecimento" : "Fase " + p; }
+
   function renderPhases(s) {
     var ol = $("phases");
     ol.textContent = "";
-    for (var p = 1; p <= 4; p++) {
+    for (var p = 0; p <= 4; p++) {
       var li = make("li", p === s.phase ? "active" : (p < s.phase ? "done" : ""));
-      li.appendChild(document.createTextNode("Fase " + p));
+      li.appendChild(document.createTextNode(phaseLabel(p)));
       if (p < s.phase) li.appendChild(make("span", "dn", " concluída"));   // em palavra, não só cor
       if (p === s.phase) li.appendChild(make("span", "pn", " · " + (s.phase_name || PHASES[p])));
       ol.appendChild(li);
@@ -119,7 +121,7 @@
     var body = $("arena-body");
     body.textContent = "";
     // sem equipe na arena, o título diz em que fase estamos em vez de "Na arena" sobre o vazio
-    $("arena-h").textContent = s.current ? "Na arena" : "Fase " + s.phase + " · " + (s.phase_name || PHASES[s.phase]);
+    $("arena-h").textContent = s.current ? "Na arena" : (s.phase === 0 ? "Aquecimento" : "Fase " + s.phase + " · " + (s.phase_name || PHASES[s.phase]));
     if (s.current) {
       var row = make("div", "arena-team");
       row.appendChild(logoEl(s.current, s.current.id));
@@ -140,9 +142,9 @@
       body.appendChild(cap);
       renderCountdown();
     } else {
-      body.appendChild(make("div", "arena-msg", s.phase_finished ? "Fase encerrada" : "Aguardando ordem"));
+      body.appendChild(make("div", "arena-msg", s.phase_finished ? (s.phase === 0 ? "Aquecimento encerrado" : "Fase encerrada") : "Aguardando ordem"));
       body.appendChild(make("div", "arena-msg-sub", s.phase_finished ?
-        "Todas as equipes da Fase " + s.phase + " já voaram." : "A ordem de voo da Fase " + s.phase + " ainda não foi definida."));
+        "Todas as equipes " + (s.phase === 0 ? "do Aquecimento" : "da Fase " + s.phase) + " já voaram." : "A ordem de voo " + (s.phase === 0 ? "do Aquecimento" : "da Fase " + s.phase) + " ainda não foi definida."));
       if (s.phase_finished && PHASES[s.phase + 1]) {
         var nx = make("div", "arena-next");
         nx.appendChild(make("span", "lbl", "Próxima fase"));

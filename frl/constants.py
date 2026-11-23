@@ -1,4 +1,5 @@
 PHASE_NAMES = {
+    0: "Aquecimento",  # warm-up: sem pontuação, não entra no ranking
     1: "Localização e Mapeamento",
     2: "Transporte de Pacotes",
     3: "Interação Humano-Enxame",

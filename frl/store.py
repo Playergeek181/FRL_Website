@@ -45,7 +45,7 @@ class Store:
     def _empty_state() -> dict:
         return {
             "teams": [],
-            "orders": {str(p): [] for p in range(1, 5)},
+            "orders": {str(p): [] for p in range(0, 5)},
             "active_phase": 1,
             "slot": timer.new_slot(0),
             "attempts": [],
@@ -65,6 +65,8 @@ class Store:
         keys = ("teams", "orders", "active_phase", "slot", "attempts")
         if not isinstance(state, dict) or any(k not in state for k in keys):
             return None
+        if isinstance(state["orders"], dict):
+            state["orders"].setdefault("0", [])  # estados salvos antes do Aquecimento
         return state
 
     def _move_aside(self, path: Path) -> Path:
@@ -180,8 +182,9 @@ class Store:
             self.state["slot"] = timer.new_slot(n)
 
     @staticmethod
-    def _check_phase(phase: int) -> None:
-        if phase not in (1, 2, 3, 4):
+    def _check_phase(phase: int, warmup: bool = False) -> None:
+        """Fases 1-4 pontuam; o Aquecimento (0) só tem ordem e cronômetro."""
+        if phase not in ((0, 1, 2, 3, 4) if warmup else (1, 2, 3, 4)):
             raise ValueError(["Fase inválida."])
 
     # -- equipes -------------------------------------------------------
@@ -251,7 +254,7 @@ class Store:
     # -- ordem / fase --------------------------------------------------
     def set_order(self, phase: int, team_ids: list) -> None:
         with self._lock:
-            self._check_phase(phase)
+            self._check_phase(phase, warmup=True)
             for tid in team_ids:
                 self._team(tid)
             current = self._current_team_id()
@@ -261,7 +264,7 @@ class Store:
 
     def set_phase(self, phase: int) -> None:
         with self._lock:
-            self._check_phase(phase)
+            self._check_phase(phase, warmup=True)
             if phase != self.state["active_phase"]:
                 # para "Desfazer" (só em memória): a fase anterior e o slot dela, pausado agora
                 slot = timer.pause(timer.tick(self.state["slot"], self.clock()), self.clock())

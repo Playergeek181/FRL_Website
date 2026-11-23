@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usuários - Placar FRL 2026</title>
+<link rel="preload" href="/static/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/common.css">
+<link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+<header class="bar">
+  <a href="/"><img src="/static/brand/cbr-petrobras.png" alt="CBR 2026"></a>
+  <nav><a class="btn ghost small" href="/controle">Controle</a>
+  <form method="post" action="/logout"><button class="small" type="submit">Sair</button></form></nav>
+</header>
+<main class="page">
+  <h1>Usuários</h1>
+  <section class="panel">
+    <h2>Novo usuário</h2>
+    <form id="new" class="row-form" autocomplete="off">
+      <label>Usuário <input name="username" required minlength="3" maxlength="32" autocapitalize="none" spellcheck="false"></label>
+      <label>Senha (mín. 8) <input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Perfil <select name="role"><option value="operator">Operador</option><option value="admin">Administrador</option></select></label>
+      <button class="primary" type="submit">Criar</button>
+    </form>
+    <p class="msg" id="msg" role="status"></p>
+  </section>
+  <section class="panel">
+    <h2>Usuários cadastrados</h2>
+    <ul class="ulist" id="list"></ul>
+  </section>
+</main>
+<script>
+var msg = document.getElementById("msg"), list = document.getElementById("list"), me = null;
+function say(t, ok) { msg.textContent = t || ""; msg.className = "msg " + (t ? (ok ? "ok" : "err") : ""); }
+function api(method, url, body) {
+  var o = { method: method, headers: {} };
+  if (body) { o.body = JSON.stringify(body); o.headers["Content-Type"] = "application/json"; }
+  return fetch(url, o).then(function (r) {
+    if (r.status === 401) { location.href = "/login?next=/usuarios"; throw new Error("auth"); }
+    return r.json().then(function (j) { if (!r.ok) throw new Error((j.errors || ["Erro " + r.status]).join(". ")); return j; });
+  });
+}
+function render(users) {
+  list.textContent = "";
+  users.forEach(function (u) {
+    var li = document.createElement("li");
+    var nm = document.createElement("span"); nm.className = "name"; nm.textContent = u.username;
+    var pill = document.createElement("span"); pill.className = "pill " + u.role; pill.textContent = u.role === "admin" ? "Administrador" : "Operador";
+    var pw = document.createElement("button"); pw.className = "small"; pw.textContent = "Nova senha";
+    pw.onclick = function () {
+      var p = prompt("Nova senha para " + u.username + " (mínimo 8 caracteres):");
+      if (p) api("POST", "/api/users/" + encodeURIComponent(u.username) + "/password", { password: p })
+        .then(function () { say("Senha de " + u.username + " alterada.", true); }, function (e) { say(e.message); });
+    };
+    li.append(nm, pill, pw);
+    if (!me || u.username.toLowerCase() !== me.toLowerCase()) {
+      var rm = document.createElement("button"); rm.className = "danger"; rm.textContent = "Remover";
+      rm.onclick = function () {
+        if (confirm("Remover o usuário " + u.username + "?")) api("DELETE", "/api/users/" + encodeURIComponent(u.username))
+          .then(function (j) { say("Usuário removido.", true); render(j.users); }, function (e) { say(e.message); });
+      };
+      li.append(rm);
+    }
+    list.append(li);
+  });
+}
+document.getElementById("new").onsubmit = function (ev) {
+  ev.preventDefault();
+  var f = ev.target;
+  api("POST", "/api/users", { username: f.username.value, password: f.password.value, role: f.role.value })
+    .then(function (j) { say("Usuário criado.", true); f.reset(); render(j.users); }, function (e) { say(e.message); });
+};
+api("GET", "/api/me").then(function (d) { me = d.user && d.user.username; return api("GET", "/api/users"); })
+  .then(function (j) { render(j.users); }, function (e) { say(e.message); });
+</script>
+</body>
+</html>

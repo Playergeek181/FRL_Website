@@ -93,7 +93,7 @@ def test_set_phase_validates_and_resets_slot(tmp_path):
     s.set_phase(3)
     assert s.state["active_phase"] == 3
     assert s.state["slot"] == timer.new_slot(0)
-    for bad in (0, 5):
+    for bad in (-1, 5):
         with pytest.raises(ValueError):
             s.set_phase(bad)
 

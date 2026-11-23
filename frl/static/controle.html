@@ -17,7 +17,11 @@
     <img class="cbr" src="/static/brand/cbr-petrobras.png" alt="Competição Brasileira de Robótica 2026 com Petrobras">
     <h1>Placar FRL 2026 <span class="sub">Controle</span></h1>
   </div>
-  <a class="btn ghost" href="/tv" target="_blank" rel="noopener"><span>Abrir <span class="wide">tela da </span>TV</span></a>
+  <div class="top-actions">
+    <a class="btn ghost" href="/tv" target="_blank" rel="noopener"><span>Abrir <span class="wide">tela da </span>TV</span></a>
+    <a class="btn ghost" id="users-link" href="/usuarios" hidden>Usuários</a>
+    <form method="post" action="/logout" id="logout-form" hidden><button class="btn ghost" type="submit">Sair</button></form>
+  </div>
 </header>
 
 <button id="mini-clock" class="mini-clock" hidden aria-label="Voltar ao cronômetro"><span class="m-team" id="mini-team"></span><span class="m-cd" id="mini-cd"></span><span class="m-st" id="mini-st"></span></button>
@@ -97,6 +101,7 @@
     <label for="phase-select" class="lbl">Fase ativa <span class="muted">· muda a TV e o cronômetro da arena</span></label>
     <div class="a-phase-row">
       <select id="phase-select">
+        <option value="0">Aquecimento</option>
         <option value="1">Fase 1</option>
         <option value="2">Fase 2</option>
         <option value="3">Fase 3</option>
@@ -111,6 +116,7 @@
         <h2 id="order-title">Ordem de voo</h2>
         <label class="inline">Fase
           <select id="order-phase-select">
+            <option value="0">Aquecimento</option>
             <option value="1">Fase 1</option>
             <option value="2">Fase 2</option>
             <option value="3">Fase 3</option>
@@ -151,5 +157,12 @@
   </div>
 </details>
 <script src="/static/controle.js"></script>
+<script>
+fetch("/api/me", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+  if (!d.user || d.user.username === "local") return;
+  document.getElementById("logout-form").hidden = false;
+  if (d.user.role === "admin") document.getElementById("users-link").hidden = false;
+}).catch(function () {});
+</script>
 </body>
 </html>

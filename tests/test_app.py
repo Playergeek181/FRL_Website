@@ -64,7 +64,7 @@ def test_logo_upload_served(client):
 
 
 def test_pages(client):
-    assert client.get("/").status_code == 302
+    assert client.get("/").status_code == 200
     assert client.get("/tv").status_code == 200 and client.get("/controle").status_code == 200
 
 
@@ -238,3 +238,130 @@ def test_phase_undo_route(client):
     assert client.post("/api/phase/undo").status_code == 400
     client.post("/api/phase", json={"phase": 2})
     assert client.post("/api/phase/undo").get_json()["phase"] == 1
+
+
+@pytest.fixture
+def secured(tmp_path):
+    app = create_app(tmp_path, auth=("admin", "senha-forte-1"))
+    return app.test_client(), tmp_path
+
+
+def _login(c, u="admin", p="senha-forte-1"):
+    return c.post("/login", data={"username": u, "password": p, "next": "/controle"})
+
+
+def test_public_pages_and_state(secured):
+    c, _ = secured
+    assert c.get("/").status_code == 200
+    assert c.get("/tv").status_code == 200
+    assert c.get("/login").status_code == 200
+    assert c.get("/api/state").status_code == 200
+    assert c.get("/api/me").get_json()["user"] is None
+
+
+def test_protected_requires_login(secured):
+    c, _ = secured
+    r = c.get("/controle")
+    assert r.status_code == 302 and r.headers["Location"].startswith("/login?next=")
+    assert c.post("/api/timer/start").status_code == 401
+    assert c.post("/api/teams", data={"name": "X"}).status_code == 401
+    assert c.get("/api/users").status_code == 401
+
+
+def test_login_flow(secured):
+    c, _ = secured
+    r = _login(c, p="errada")
+    assert "error=bad" in r.headers["Location"]
+    r = _login(c)
+    assert r.status_code == 302 and r.headers["Location"] == "/controle"
+    assert c.get("/controle").status_code == 200
+    assert c.post("/api/teams", data={"name": "X"}).status_code == 200
+    assert c.get("/api/me").get_json()["user"]["username"] == "admin"
+    c.post("/logout")
+    assert c.get("/controle").status_code == 302
+
+
+def test_open_redirect_blocked(secured):
+    c, _ = secured
+    r = c.post("/login", data={"username": "admin", "password": "senha-forte-1", "next": "https://evil.example"})
+    assert r.headers["Location"] == "/controle"
+
+
+def test_throttle_locks_after_failures(secured):
+    c, _ = secured
+    for _ in range(5):
+        _login(c, p="x")
+    r = _login(c)  # even the right password is refused while locked
+    assert "error=locked" in r.headers["Location"]
+
+
+def test_admin_creates_operator_who_cannot_manage_users(secured):
+    c, _ = secured
+    _login(c)
+    r = c.post("/api/users", json={"username": "juiz1", "password": "outra-senha-9", "role": "operator"})
+    assert r.status_code == 200
+    assert {u["username"] for u in r.get_json()["users"]} == {"admin", "juiz1"}
+    assert c.post("/api/users", json={"username": "juiz1", "password": "outra-senha-9"}).status_code == 400
+    assert c.post("/api/users", json={"username": "x", "password": "curta"}).status_code == 400
+    c.post("/logout")
+    assert _login(c, "JUIZ1", "outra-senha-9").headers["Location"] == "/controle"  # case-insensitive name
+    assert c.get("/controle").status_code == 200
+    assert c.get("/api/users").status_code == 403
+    assert c.get("/usuarios").status_code == 302
+
+
+def test_cannot_delete_self_and_password_change_ends_session(secured):
+    c, _ = secured
+    _login(c)
+    assert c.delete("/api/users/admin").status_code == 400
+    c.post("/api/users", json={"username": "oper", "password": "senha-op-123"})
+    op = secured[0].application.test_client()
+    _login(op, "oper", "senha-op-123")
+    assert op.get("/controle").status_code == 200
+    c.post("/api/users/oper/password", json={"password": "nova-senha-456"})
+    assert op.get("/controle").status_code == 302  # old session invalidated
+    c.delete("/api/users/oper")
+    assert _login(op, "oper", "nova-senha-456").headers["Location"].startswith("/login")
+
+
+def test_passwords_are_hashed_and_persist(tmp_path):
+    create_app(tmp_path, auth=("admin", "senha-forte-1"))
+    raw = (tmp_path / "users.json").read_text()
+    assert "senha-forte-1" not in raw
+    c = create_app(tmp_path, auth=("admin", "senha-forte-1")).test_client()
+    assert _login(c).headers["Location"] == "/controle"
+
+
+def test_cross_origin_write_rejected(secured):
+    c, _ = secured
+    _login(c)
+    r = c.post("/api/teams", data={"name": "X"}, headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403
+
+
+def test_warmup_stage(client):
+    a = client.post("/api/teams", data={"name": "A"}).get_json()["teams"][0]["id"]
+    b = client.post("/api/teams", data={"name": "B"}).get_json()["teams"][-1]["id"]
+    assert client.post("/api/orders/0", json={"team_ids": [b, a]}).status_code == 200
+    s = client.post("/api/phase", json={"phase": 0}).get_json()
+    assert s["phase"] == 0 and s["phase_name"] == "Aquecimento"
+    assert s["current"]["name"] == "B" and s["next"]["name"] == "A"
+    assert client.post("/api/timer/start").get_json()["timer"]["running"]
+    # sem pontuação: não aceita tentativas nem entra no ranking
+    r = client.post("/api/attempts", json={"team_id": b, "phase": 0, "inputs": {}})
+    assert r.status_code == 400
+    assert all(r["total"] == 0 and r["position"] is None for r in client.get("/api/state").get_json()["ranking"])
+    s = client.post("/api/timer/next").get_json()
+    assert s["current"]["name"] == "A"
+    assert client.post("/api/phase", json={"phase": 1}).get_json()["phase"] == 1
+
+
+def test_old_state_without_warmup_loads(tmp_path):
+    import json
+    from frl.store import Store
+    Store(tmp_path)  # cria
+    st = json.loads((tmp_path / "state.json").read_text()) if (tmp_path / "state.json").exists() else None
+    s = Store(tmp_path)
+    s.state["orders"].pop("0")
+    s._save()
+    assert Store(tmp_path).state["orders"]["0"] == []

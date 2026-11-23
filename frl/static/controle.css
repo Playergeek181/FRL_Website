@@ -288,3 +288,5 @@ ul.plain li:first-child { border-top: 0; padding-top: 0; }
   .mini-clock .m-cd.low { color: var(--negative); }
   .mini-clock .m-st { font-size: 13px; color: var(--faint); }
 }
+.top-actions { display: flex; align-items: center; gap: 8px; }
+.top-actions form { display: contents; }
